@@ -1,0 +1,3322 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Seguimiento SmartWork</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="config.js"></script>
+<style>
+  :root {
+    --bg: oklch(0.99 0.003 250);
+    --surface: oklch(1 0 0);
+    --surface-2: oklch(0.975 0.004 250);
+    --border: oklch(0.92 0.006 250);
+    --border-strong: oklch(0.86 0.008 250);
+    --fg: oklch(0.18 0.01 250);
+    --fg-muted: oklch(0.5 0.01 250);
+    --fg-subtle: oklch(0.65 0.008 250);
+    --accent: oklch(0.55 0.15 255);
+    --accent-hover: oklch(0.49 0.16 255);
+    --accent-soft: oklch(0.96 0.025 255);
+    --danger: oklch(0.6 0.18 25);
+    --danger-soft: oklch(0.96 0.03 25);
+    --warn: oklch(0.72 0.15 75);
+    --warn-soft: oklch(0.96 0.04 75);
+    --ok: oklch(0.62 0.13 150);
+    --ok-soft: oklch(0.96 0.03 150);
+    --shadow-sm: 0 1px 2px oklch(0.18 0.01 250 / 0.04);
+    --shadow-md: 0 4px 12px oklch(0.18 0.01 250 / 0.06), 0 1px 3px oklch(0.18 0.01 250 / 0.04);
+    --shadow-lg: 0 12px 32px oklch(0.18 0.01 250 / 0.1), 0 4px 8px oklch(0.18 0.01 250 / 0.06);
+    --radius: 10px;
+    --radius-sm: 6px;
+    --radius-lg: 14px;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+  button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; font-size: inherit; }
+  input, select, textarea { font-family: inherit; font-size: inherit; color: inherit; }
+  .mono { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
+
+  /* ---------- App shell ---------- */
+  .app {
+    display: grid;
+    grid-template-columns: 232px 1fr;
+    min-height: 100vh;
+  }
+
+  .sidebar {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 24px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 8px 24px 8px;
+  }
+  .brand-mark {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: var(--fg);
+    color: var(--bg);
+    display: grid;
+    place-items: center;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: -0.02em;
+  }
+  .brand-name {
+    font-weight: 600;
+    font-size: 14px;
+    letter-spacing: -0.01em;
+  }
+  .brand-sub {
+    font-size: 11px;
+    color: var(--fg-muted);
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-radius: var(--radius-sm);
+    color: var(--fg-muted);
+    font-weight: 500;
+    transition: background 0.12s, color 0.12s;
+    text-align: left;
+    width: 100%;
+  }
+  .nav-item:hover { background: var(--surface-2); color: var(--fg); }
+  .nav-item.active { background: var(--fg); color: var(--bg); }
+  .nav-item .ico { width: 16px; height: 16px; flex-shrink: 0; }
+
+  .sidebar-footer {
+    margin-top: auto;
+    padding: 12px 8px 0 8px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--fg-subtle);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .conn-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--fg-subtle);
+    flex-shrink: 0;
+  }
+  .conn-dot.live { background: var(--ok); box-shadow: 0 0 0 3px oklch(0.62 0.13 150 / 0.18); }
+  .conn-dot.offline { background: var(--warn); }
+
+  .main {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .topbar {
+    padding: 24px 32px 16px 32px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .page-title {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin: 0;
+  }
+  .page-sub {
+    font-size: 13px;
+    color: var(--fg-muted);
+    margin-top: 2px;
+  }
+
+  .content {
+    padding: 8px 32px 80px 32px;
+    flex: 1;
+  }
+
+  /* ---------- Buttons ---------- */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: var(--radius-sm);
+    font-weight: 500;
+    font-size: 13px;
+    border: 1px solid transparent;
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
+    white-space: nowrap;
+  }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-ghost { color: var(--fg-muted); border-color: var(--border); background: var(--surface); }
+  .btn-ghost:hover { color: var(--fg); border-color: var(--border-strong); }
+  .btn-danger { color: var(--danger); border-color: var(--border); background: var(--surface); }
+  .btn-danger:hover { background: var(--danger-soft); border-color: var(--danger); }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+  .btn .ico { width: 14px; height: 14px; }
+
+  /* ---------- Stats ---------- */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.12s, box-shadow 0.12s, background 0.12s, transform 0.06s;
+    position: relative;
+  }
+  .stat-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow-sm); }
+  .stat-card:active { transform: scale(0.99); }
+  .stat-card.active { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 3px oklch(0.55 0.15 255 / 0.08); }
+  .stat-card.active .stat-label { color: var(--accent); }
+  .stat-card.active::after {
+    content: 'Filtrando';
+    position: absolute; top: 10px; right: 12px;
+    font-size: 9px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--accent);
+    background: var(--surface);
+    padding: 2px 6px;
+    border-radius: 999px;
+    border: 1px solid var(--accent);
+  }
+  .stat-label {
+    font-size: 11px;
+    color: var(--fg-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 500;
+  }
+  .stat-value {
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin-top: 6px;
+  }
+  .stat-meta { font-size: 12px; color: var(--fg-subtle); margin-top: 2px; }
+
+  /* ---------- Toolbar / filters ---------- */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .filter-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 4px 4px 4px 12px;
+  }
+  .filter-group label {
+    font-size: 11px;
+    color: var(--fg-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 500;
+  }
+  select.filter, select.input {
+    border: none;
+    background: transparent;
+    padding: 6px 24px 6px 6px;
+    border-radius: var(--radius-sm);
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10' fill='none'><path d='M2 4 L5 7 L8 4' stroke='%2370778a' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    cursor: pointer;
+    font-weight: 500;
+  }
+  .filter-clear {
+    color: var(--fg-muted);
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+  }
+  .filter-clear:hover { color: var(--fg); background: var(--surface-2); }
+
+  /* ---------- Add task form ---------- */
+  .new-task {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+    display: grid;
+    grid-template-columns: 1fr 140px 140px 120px 130px 90px auto;
+    gap: 10px;
+    margin-bottom: 18px;
+    box-shadow: var(--shadow-sm);
+  }
+  .new-task input, .new-task select {
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    transition: border-color 0.12s, box-shadow 0.12s;
+  }
+  .new-task input:focus, .new-task select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+
+  /* ---------- Task list ---------- */
+  .task-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .section-heading {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--fg-muted);
+    margin: 18px 0 8px 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-heading:first-child { margin-top: 0; }
+  .section-heading .count {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--fg-muted);
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 10px;
+  }
+
+  .task {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    gap: 14px;
+    align-items: center;
+    transition: border-color 0.12s, box-shadow 0.12s, background 0.12s;
+  }
+  .task:hover { border-color: var(--border-strong); box-shadow: var(--shadow-sm); }
+  .task.done { background: var(--surface-2); }
+  .task.done .task-text { color: var(--fg-muted); text-decoration: line-through; text-decoration-color: var(--border-strong); }
+
+  .check {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border-strong);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: border-color 0.12s, background 0.12s, color 0.12s;
+  }
+  .check:hover { border-color: var(--accent); }
+  .check.idle { color: var(--fg-muted); border-style: dashed; }
+  .check.idle:hover { color: var(--accent); border-color: var(--accent); border-style: solid; background: var(--accent-soft); }
+  .check.idle svg { width: 9px; height: 9px; opacity: 1; }
+  .check.running { border-color: var(--accent); background: var(--accent); }
+  .check.running svg { color: white; opacity: 1; }
+  .check.running:hover { border-color: var(--accent-hover); background: var(--accent-hover); }
+  .check.running:hover svg { opacity: 1; color: white; }
+  .check.checked { border-color: var(--ok); background: var(--ok); }
+  .check.checked svg { color: white; opacity: 1; }
+
+  .task-body { min-width: 0; }
+  .task-text {
+    font-size: 14px;
+    font-weight: 500;
+    margin: 0;
+    word-break: break-word;
+  }
+  .task-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 6px;
+    flex-wrap: wrap;
+  }
+  .meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--fg-muted);
+  }
+
+  .project-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--fg-muted);
+  }
+  .project-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* Avatar */
+  .avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    color: white;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    flex-shrink: 0;
+  }
+  .avatar.lg { width: 32px; height: 32px; font-size: 12px; }
+
+  /* Due date badge */
+  .due-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 500;
+    border: 1px solid var(--border);
+    color: var(--fg-muted);
+    background: var(--surface);
+  }
+  .due-badge svg { width: 11px; height: 11px; }
+  .due-badge.overdue { color: var(--danger); border-color: var(--danger); background: var(--danger-soft); }
+  .due-badge.today { color: oklch(0.45 0.13 70); border-color: var(--warn); background: var(--warn-soft); }
+  .due-badge.soon { color: var(--accent); border-color: oklch(0.85 0.06 255); background: var(--accent-soft); }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.4;
+  }
+  .badge .b-dot { width: 6px; height: 6px; border-radius: 50%; }
+  .badge.alta { background: var(--danger-soft); color: var(--danger); }
+  .badge.alta .b-dot { background: var(--danger); }
+  .badge.media { background: var(--warn-soft); color: oklch(0.45 0.13 70); }
+  .badge.media .b-dot { background: var(--warn); }
+  .badge.baja { background: var(--ok-soft); color: var(--ok); }
+  .badge.baja .b-dot { background: var(--ok); }
+
+  /* Timer */
+  .timer {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    font-size: 12px;
+    color: var(--fg-muted);
+  }
+  .timer.state-running { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+  .timer.state-done { color: var(--ok); border-color: oklch(0.85 0.05 150); background: var(--ok-soft); }
+  .timer.state-idle { color: var(--fg-subtle); }
+  .timer-time { font-size: 12px; font-weight: 500; min-width: 60px; text-align: right; }
+  .timer-state { display: inline-flex; align-items: center; }
+  .timer-state svg { width: 10px; height: 10px; }
+  /* Time block (replaces live timer for runtime tasks) */
+  .time-block {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 180px;
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    font-size: 11px;
+  }
+  .time-block.idle {
+    min-width: 100px;
+    align-items: center;
+    justify-content: center;
+    color: var(--fg-subtle);
+    border-style: dashed;
+  }
+  .time-block.running { border-color: oklch(0.85 0.05 255); background: var(--accent-soft); }
+  .time-block.done { border-color: oklch(0.85 0.05 150); background: var(--ok-soft); }
+  .time-row { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+  .time-row.dim { color: var(--fg-muted); }
+  .time-row.total { padding-top: 3px; margin-top: 1px; border-top: 1px dashed oklch(0.85 0.05 150); font-weight: 600; }
+  .time-key { color: var(--fg-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .time-val { color: var(--fg); font-size: 11px; }
+  .time-row.total .time-val { font-size: 13px; color: var(--ok); }
+  .time-pulse {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent);
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  .time-hint { font-size: 11px; }
+  @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+
+  .task-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .icon-btn {
+    width: 28px; height: 28px;
+    border-radius: var(--radius-sm);
+    display: grid; place-items: center;
+    color: var(--fg-subtle);
+    transition: background 0.12s, color 0.12s;
+  }
+  .icon-btn:hover { background: var(--surface-2); color: var(--fg); }
+  .icon-btn.danger:hover { background: var(--danger-soft); color: var(--danger); }
+  .icon-btn svg { width: 14px; height: 14px; }
+
+  /* ---------- Tables / list cards (Proyectos & Personas) ---------- */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .panel-header {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: 1fr 200px 110px;
+    gap: 12px;
+    background: var(--surface-2);
+    align-items: center;
+  }
+  .panel-header.people { grid-template-columns: 1fr 110px; }
+  .panel-header input, .panel-header select {
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+  }
+  .panel-header input:focus, .panel-header select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  .row {
+    padding: 12px 18px;
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 14px;
+    align-items: center;
+    border-bottom: 1px solid var(--border);
+  }
+  .row:last-child { border-bottom: none; }
+  .row-name {
+    display: flex; align-items: center; gap: 12px;
+    min-width: 0;
+  }
+  .row-name span { font-weight: 500; word-break: break-word; }
+  .row-meta { color: var(--fg-muted); font-size: 12px; }
+
+  .color-swatch {
+    width: 18px; height: 18px; border-radius: 5px;
+    flex-shrink: 0;
+    border: 1px solid oklch(0 0 0 / 0.06);
+  }
+  .color-picker {
+    display: flex; gap: 6px; flex-wrap: wrap;
+  }
+  .color-chip {
+    width: 24px; height: 24px;
+    border-radius: 6px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: transform 0.1s, border-color 0.12s;
+  }
+  .color-chip:hover { transform: scale(1.1); }
+  .color-chip.selected { border-color: var(--fg); }
+
+  /* Empty state */
+  .empty {
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--fg-muted);
+  }
+  .empty-title { font-weight: 500; color: var(--fg); margin-bottom: 4px; }
+
+  /* ---------- Settings ---------- */
+  .settings-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 22px;
+    margin-bottom: 16px;
+  }
+  .settings-section h3 {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0 0 4px 0;
+    letter-spacing: -0.01em;
+  }
+  .settings-section p.sub {
+    font-size: 12px;
+    color: var(--fg-muted);
+    margin: 0 0 16px 0;
+  }
+  .settings-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-top: 1px solid var(--border);
+    gap: 16px;
+  }
+  .settings-row:first-of-type { border-top: none; }
+  .settings-row .label { font-weight: 500; font-size: 13px; }
+  .settings-row .desc { font-size: 12px; color: var(--fg-muted); margin-top: 2px; }
+
+  /* Toggle */
+  .toggle {
+    width: 36px; height: 20px;
+    background: var(--border-strong);
+    border-radius: 999px;
+    position: relative;
+    transition: background 0.15s;
+    flex-shrink: 0;
+  }
+  .toggle.on { background: var(--accent); }
+  .toggle::after {
+    content: '';
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 16px; height: 16px;
+    background: white;
+    border-radius: 50%;
+    transition: transform 0.15s;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+  }
+  .toggle.on::after { transform: translateX(16px); }
+
+  /* ---------- Modal ---------- */
+  .modal-backdrop {
+    position: fixed; inset: 0;
+    background: oklch(0.18 0.01 250 / 0.4);
+    display: grid; place-items: center;
+    z-index: 100;
+    padding: 24px;
+    animation: fadeIn 0.15s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .modal {
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    width: 100%;
+    max-width: 460px;
+    box-shadow: var(--shadow-lg);
+  }
+  .modal h3 {
+    margin: 0 0 4px 0;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .modal .field {
+    margin-top: 14px;
+  }
+  .modal .field label {
+    display: block;
+    font-size: 12px;
+    color: var(--fg-muted);
+    margin-bottom: 6px;
+    font-weight: 500;
+  }
+  .modal input {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+  }
+  .modal input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  .modal-actions {
+    display: flex; justify-content: flex-end; gap: 8px;
+    margin-top: 20px;
+  }
+
+  /* ---------- Toast ---------- */
+  .toast-host {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 200;
+  }
+  .toast {
+    background: var(--fg);
+    color: var(--bg);
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    box-shadow: var(--shadow-lg);
+    animation: slideIn 0.2s ease;
+  }
+  .toast.error { background: var(--danger); }
+  @keyframes slideIn { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+  /* ---------- Mobile tabs ---------- */
+  .mobile-tabs {
+    display: none;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 6px 8px max(6px, env(safe-area-inset-bottom)) 8px;
+    z-index: 50;
+  }
+  .mobile-tabs-inner {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+  }
+  .mobile-tabs .nav-item {
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 4px;
+    font-size: 10px;
+    border-radius: var(--radius-sm);
+    text-align: center;
+    align-items: center;
+    justify-content: center;
+  }
+  .mobile-tabs .nav-item .ico { width: 18px; height: 18px; }
+  .mobile-tabs .nav-item.active { background: transparent; color: var(--accent); }
+
+  .pages > section { display: none; }
+  .pages > section.active { display: block; }
+
+  /* ---------- Responsive ---------- */
+  @media (max-width: 860px) {
+    .app { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .topbar { padding: 18px 16px 8px 16px; }
+    .content { padding: 8px 16px 96px 16px; }
+    .mobile-tabs { display: block; }
+    .stats { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .stat-card { padding: 12px; }
+    .stat-value { font-size: 22px; }
+    .new-task {
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .new-task input:first-child { grid-column: 1 / -1; }
+    .new-task button { grid-column: 1 / -1; justify-content: center; }
+    .task {
+      grid-template-columns: auto 1fr auto;
+      gap: 10px;
+    }
+    .task .timer { grid-column: 2 / 3; grid-row: 2; justify-self: start; }
+    .task .task-actions { grid-row: 1; }
+    .panel-header { grid-template-columns: 1fr; }
+    .panel-header.people { grid-template-columns: 1fr; }
+    .row { grid-template-columns: 1fr auto; }
+  }
+  /* ---------- Dashboard ---------- */
+  .dash-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  .dash-grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  .dash-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .dash-panel-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--fg-muted);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .dash-panel-body { padding: 12px 16px; }
+  .dash-alert-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .dash-alert-row:last-child { border-bottom: none; }
+  .alert-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    flex-shrink: 0; margin-top: 4px;
+  }
+  .cap-person-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .cap-person-row:last-child { border-bottom: none; }
+  .cap-bar-wrap {
+    flex: 1;
+    height: 8px;
+    background: var(--surface-2);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .cap-bar-fill {
+    height: 100%;
+    border-radius: 999px;
+    transition: width .3s;
+  }
+  .eff-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .eff-row:last-child { border-bottom: none; }
+  .eff-badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+
+  /* ---------- Week grid ---------- */
+  /* ---------- Week planner ---------- */
+  .wp-grid {
+    display: grid;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--surface);
+    min-width: 700px;
+  }
+  .wp-header-row { display: grid; background: var(--surface-2); border-bottom: 2px solid var(--border); }
+  .wp-header-cell {
+    padding: 10px 8px 8px;
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--fg-muted);
+    border-right: 1px solid var(--border); text-align: center;
+  }
+  .wp-header-cell:first-child { text-align: left; }
+  .wp-header-cell:last-child { border-right: none; }
+  .wp-header-cell.today-col { color: var(--accent); background: var(--accent-soft); }
+  .wp-header-day-num { font-size: 16px; font-weight: 700; color: var(--fg); line-height: 1.2; display: block; margin-top: 2px; }
+  .wp-header-cell.today-col .wp-header-day-num { color: var(--accent); }
+
+  /* Capacity bar in header */
+  .wp-cap-bar { height: 4px; background: var(--surface-2); border-radius: 999px; margin-top: 6px; overflow: hidden; }
+  .wp-cap-fill { height: 100%; border-radius: 999px; transition: width .3s; }
+  .wp-cap-label { font-size: 10px; margin-top: 3px; font-weight: 600; }
+
+  .wp-person-row { display: grid; border-bottom: 1px solid var(--border); }
+  .wp-person-row:last-child { border-bottom: none; }
+  .wp-person-label-cell {
+    padding: 10px 8px; border-right: 1px solid var(--border);
+    display: flex; align-items: flex-start; gap: 7px;
+  }
+  .wp-person-name { font-size: 12px; font-weight: 600; line-height: 1.3; }
+  .wp-person-free {
+    font-size: 10px; padding: 1px 6px; border-radius: 999px;
+    font-weight: 600; margin-top: 3px; display: inline-block;
+  }
+
+  .wp-day-cell {
+    padding: 6px; border-right: 1px solid var(--border);
+    min-height: 80px; display: flex; flex-direction: column; gap: 4px;
+    cursor: pointer; transition: background .1s;
+    position: relative;
+  }
+  .wp-day-cell:last-child { border-right: none; }
+  .wp-day-cell:hover { background: var(--surface-2); }
+  .wp-day-cell.today-col { background: oklch(0.97 0.015 255); }
+  .wp-day-cell.today-col:hover { background: oklch(0.94 0.025 255); }
+  .wp-day-cell.overloaded { background: var(--danger-soft); }
+  .wp-day-cell.overloaded:hover { background: oklch(0.93 0.04 25); }
+  .wp-day-cell.busy { background: var(--warn-soft); }
+  .wp-day-cell.busy:hover { background: oklch(0.93 0.05 75); }
+
+  .wp-add-hint {
+    font-size: 11px;
+    color: var(--border-strong);
+    text-align: center;
+    margin-top: auto;
+    padding: 6px 0;
+    opacity: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    border: 1.5px dashed var(--border);
+    border-radius: 5px;
+    transition: border-color .15s, color .15s, background .15s;
+  }
+  .wp-day-cell:hover .wp-add-hint {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-soft);
+  }
+
+  .wp-chip {
+    font-size: 11px; padding: 4px 7px; border-radius: 5px;
+    line-height: 1.35; cursor: pointer;
+    border-left: 3px solid transparent;
+    transition: filter .1s, transform .1s;
+    position: relative;
+  }
+  .wp-chip:hover { filter: brightness(.95); transform: translateX(1px); }
+  .wp-chip.chip-idle    { background: var(--surface); color: var(--fg-muted); border-color: var(--border-strong); box-shadow: 0 1px 2px oklch(0 0 0 / .06); }
+  .wp-chip.chip-running { background: oklch(0.93 0.03 255); color: var(--accent); border-color: var(--accent); }
+  .wp-chip.chip-done    { background: var(--ok-soft); color: var(--ok); border-color: var(--ok); opacity: .65; text-decoration: line-through; cursor: default; }
+  .wp-chip.chip-done:hover { filter: none; transform: none; }
+  .wp-chip.chip-overdue { background: var(--danger-soft); color: var(--danger); border-color: var(--danger); }
+  .wp-chip-title { display: block; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+  .wp-chip-meta  { display: flex; gap: 5px; font-size: 10px; opacity: .7; margin-top: 1px; }
+
+  /* Backlog panel */
+  .wp-backlog-title {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .07em; color: var(--fg-muted); margin-bottom: 12px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .wp-backlog-person { margin-bottom: 14px; }
+  .wp-backlog-person-label {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; font-weight: 600; color: var(--fg-muted);
+    text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px;
+  }
+  .wp-backlog-chip {
+    font-size: 11px; padding: 5px 8px; border-radius: 5px;
+    background: var(--surface); border: 1px solid var(--border);
+    margin-bottom: 4px; cursor: pointer;
+    transition: border-color .1s, box-shadow .1s;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .wp-backlog-chip:hover { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .wp-backlog-chip-text { flex: 1; min-width: 0; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wp-backlog-chip-est { font-size: 10px; color: var(--fg-subtle); flex-shrink: 0; }
+  .wp-backlog-empty { font-size: 12px; color: var(--fg-subtle); padding: 8px 0; }
+
+  /* ---------- Time log entries ---------- */
+  .tlog-list { display:flex; flex-direction:column; gap:3px; margin-top:6px; }
+  .tlog-entry {
+    display:flex; align-items:center; gap:6px;
+    font-size:11px; color:var(--fg-muted);
+    padding:3px 6px; background:var(--surface-2);
+    border-radius:4px;
+  }
+  .tlog-entry-hours { font-weight:700; color:var(--fg); min-width:28px; }
+  .tlog-entry-date  { color:var(--fg-subtle); }
+  .tlog-entry-note  { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-style:italic; }
+  .tlog-entry-del   { margin-left:auto; cursor:pointer; opacity:.4; flex-shrink:0; }
+  .tlog-entry-del:hover { opacity:1; color:var(--danger); }
+  .tlog-total {
+    display:flex; justify-content:space-between; align-items:center;
+    font-size:11px; margin-top:4px; padding-top:4px;
+    border-top:1px solid var(--border);
+  }
+
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">SW</div>
+      <div>
+        <div class="brand-name">SmartWork</div>
+        <div class="brand-sub">Seguimiento</div>
+      </div>
+    </div>
+
+    <button class="nav-item active" data-page="board">
+      <svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="5" height="6" rx="1"/><rect x="9" y="2" width="5" height="9" rx="1"/><rect x="2" y="10" width="5" height="4" rx="1"/><rect x="9" y="13" width="5" height="1" rx="0.5"/></svg>
+      Tablero
+    </button>
+    <button class="nav-item" data-page="dashboard">
+      <svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>
+      Dashboard
+    </button>
+    <button class="nav-item" data-page="week">
+      <svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 6.5h12M5.5 3V1.5M10.5 3V1.5"/></svg>
+      Semana
+    </button>
+    <button class="nav-item" data-page="projects">
+      <svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4a1 1 0 0 1 1-1h3l1.5 1.5H13a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z"/></svg>
+      Proyectos
+    </button>
+    <button class="nav-item" data-page="people">
+      <svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"/><path d="M2 13c0-2 2-3.5 4-3.5s4 1.5 4 3.5"/><circle cx="11" cy="5" r="2"/><path d="M10.5 9.6c.3-.1.6-.1 1-.1 1.5 0 3 1.2 3 3"/></svg>
+      Personas
+    </button>
+    <button class="nav-item" data-page="settings">
+      <svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M3 13l1.4-1.4M11.6 4.4 13 3"/></svg>
+      Configuración
+    </button>
+
+    <div class="sidebar-footer">
+      <span class="conn-dot offline" id="connDot"></span>
+      <span id="connLabel">Sin conexión</span>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <div class="pages">
+
+      <!-- ============== DASHBOARD ============== -->
+      <section id="page-dashboard">
+        <div class="topbar">
+          <div>
+            <h1 class="page-title">Dashboard</h1>
+            <div class="page-sub" id="dashSub">Vista general del equipo</div>
+          </div>
+          <button class="btn btn-ghost" id="exportExcelBtn2">
+            <svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12.5h10M8 2v8M5 7l3 3 3-3"/></svg>
+            Exportar Excel
+          </button>
+        </div>
+        <div class="content" id="dashContent"></div>
+      </section>
+
+      <!-- ============== TABLERO ============== -->
+      <section id="page-board" class="active">
+        <div class="topbar">
+          <div>
+            <h1 class="page-title">Tablero</h1>
+            <div class="page-sub" id="boardSub">Tareas del equipo</div>
+          </div>
+          <button class="btn btn-ghost" id="exportExcelBtn">
+            <svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12.5h10M8 2v8M5 7l3 3 3-3"/></svg>
+            Exportar Excel
+          </button>
+        </div>
+
+        <div class="content">
+          <!-- Stats -->
+          <div class="stats" id="stats">
+            <button type="button" class="stat-card" data-stat-filter="pending" id="statCardPending">
+              <div class="stat-label">Pendientes</div>
+              <div class="stat-value mono" id="statPending">0</div>
+              <div class="stat-meta" id="statPendingMeta">tareas activas</div>
+            </button>
+            <button type="button" class="stat-card" data-stat-filter="done" id="statCardDone">
+              <div class="stat-label">Completadas</div>
+              <div class="stat-value mono" id="statDone">0</div>
+              <div class="stat-meta" id="statDoneMeta">finalizadas</div>
+            </button>
+            <button type="button" class="stat-card" data-stat-filter="done" id="statCardTime">
+              <div class="stat-label">Tiempo total</div>
+              <div class="stat-value mono" id="statTime">00:00:00</div>
+              <div class="stat-meta" id="statTimeMeta">tareas completadas</div>
+            </button>
+          </div>
+
+          <!-- Add task -->
+          <form class="new-task" id="newTaskForm" autocomplete="off">
+            <input type="text" id="ntText" placeholder="¿Qué hay que hacer?" required />
+            <select id="ntProject" required>
+              <option value="">Proyecto…</option>
+            </select>
+            <select id="ntAuthor" required>
+              <option value="">Autor…</option>
+            </select>
+            <select id="ntPriority">
+              <option value="media">Prioridad media</option>
+              <option value="alta">Prioridad alta</option>
+              <option value="baja">Prioridad baja</option>
+            </select>
+            <input type="date" id="ntDueDate" title="Fecha de entrega" />
+            <input type="number" id="ntEstHours" placeholder="Est. horas" min="0.5" max="40" step="0.5" title="Horas estimadas" style="width:100%;" />
+            <button type="submit" class="btn btn-primary">
+              <svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>
+              Agregar
+            </button>
+          </form>
+
+          <!-- Filters -->
+          <div class="toolbar">
+            <div class="filter-group">
+              <label>Proyecto</label>
+              <select class="filter" id="fProject"><option value="">Todos</option></select>
+            </div>
+            <div class="filter-group">
+              <label>Autor</label>
+              <select class="filter" id="fAuthor"><option value="">Todos</option></select>
+            </div>
+            <div class="filter-group">
+              <label>Prioridad</label>
+              <select class="filter" id="fPriority">
+                <option value="">Todas</option>
+                <option value="alta">Alta</option>
+                <option value="media">Media</option>
+                <option value="baja">Baja</option>
+              </select>
+            </div>
+            <button type="button" class="filter-clear" id="clearFilters">Limpiar filtros</button>
+          </div>
+
+          <div id="taskListHost"></div>
+        </div>
+      </section>
+
+      <!-- ============== PROYECTOS ============== -->
+      <section id="page-projects">
+        <div class="topbar">
+          <div>
+            <h1 class="page-title">Proyectos</h1>
+            <div class="page-sub">Organiza el trabajo en proyectos con un nombre y un color.</div>
+          </div>
+        </div>
+        <div class="content">
+          <div class="panel">
+            <form class="panel-header" id="newProjectForm" autocomplete="off">
+              <input type="text" id="npName" placeholder="Nombre del proyecto" required />
+              <div class="color-picker" id="npColors"></div>
+              <button type="submit" class="btn btn-primary">Agregar</button>
+            </form>
+            <div id="projectList"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============== PERSONAS ============== -->
+      <section id="page-people">
+        <div class="topbar">
+          <div>
+            <h1 class="page-title">Personas</h1>
+            <div class="page-sub">Miembros del equipo · capacidad y tiempos reales.</div>
+          </div>
+        </div>
+        <div class="content">
+          <!-- Capacity cards -->
+          <div id="capacityCards" style="margin-bottom:24px;"></div>
+          <div class="panel">
+            <form class="panel-header people" id="newPersonForm" autocomplete="off">
+              <input type="text" id="ppName" placeholder="Nombre del miembro del equipo" required />
+              <button type="submit" class="btn btn-primary">Agregar</button>
+            </form>
+            <div id="peopleList"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============== SEMANA ============== -->
+      <section id="page-week">
+        <div class="topbar">
+          <div>
+            <h1 class="page-title">Planificación semanal</h1>
+            <div class="page-sub" id="weekSub">Distribuye carga · asigna fechas · reorganiza tareas</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button class="btn btn-ghost btn-sm" id="weekPrev">
+              <svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M10 3L6 8l4 5"/></svg>
+            </button>
+            <span id="weekRangeLabel" style="font-size:13px;font-weight:500;min-width:160px;text-align:center;"></span>
+            <button class="btn btn-ghost btn-sm" id="weekNext">
+              <svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 3l4 5-4 5"/></svg>
+            </button>
+            <button class="btn btn-ghost btn-sm" id="weekToday">Hoy</button>
+          </div>
+        </div>
+        <div class="content" style="padding-left:0;padding-right:0;">
+          <div style="display:grid;grid-template-columns:220px 1fr;gap:0;min-height:calc(100vh - 120px);">
+            <!-- Backlog sidebar -->
+            <div id="weekBacklogPanel" style="border-right:1px solid var(--border);padding:16px;background:var(--surface-2);overflow-y:auto;"></div>
+            <!-- Main planner -->
+            <div style="padding:16px 24px;overflow-x:auto;">
+              <div id="weekGrid"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============== CONFIGURACIÓN ============== -->
+      <section id="page-settings">
+        <div class="topbar">
+          <div>
+            <h1 class="page-title">Configuración</h1>
+            <div class="page-sub">Preferencias generales de la aplicación.</div>
+          </div>
+        </div>
+        <div class="content">
+          <div class="settings-section">
+            <h3>General</h3>
+            <p class="sub">Ajustes que se guardan localmente en este navegador.</p>
+            <div class="settings-row">
+              <div>
+                <div class="label">Mostrar tareas completadas</div>
+                <div class="desc">Las tareas marcadas como hechas siguen visibles en el tablero.</div>
+              </div>
+              <button class="toggle on" id="setShowDone" data-key="showDone"></button>
+            </div>
+            <div class="settings-row">
+              <div>
+                <div class="label">Notificaciones del navegador</div>
+                <div class="desc">Recibir un aviso cuando alguien crea o completa una tarea.</div>
+              </div>
+              <button class="toggle" id="setNotifs" data-key="notifs"></button>
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <h3>Datos</h3>
+            <p class="sub">Conexión con la base de datos.</p>
+            <div class="settings-row">
+              <div>
+                <div class="label">Estado de Supabase</div>
+                <div class="desc" id="setConnDesc">Comprobando conexión…</div>
+              </div>
+              <span class="badge" id="setConnBadge"><span class="b-dot"></span> <span>—</span></span>
+            </div>
+            <div class="settings-row">
+              <div>
+                <div class="label">Recargar datos</div>
+                <div class="desc">Vuelve a leer proyectos, personas y tareas.</div>
+              </div>
+              <button class="btn btn-ghost" id="reloadBtn">Recargar</button>
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <h3>Acerca de</h3>
+            <p class="sub" style="margin-bottom: 0;">SmartWork · Seguimiento de tareas para equipos pequeños. Diseñado para ser rápido, claro y colaborativo en tiempo real.</p>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<!-- Mobile tabs -->
+<nav class="mobile-tabs">
+  <div class="mobile-tabs-inner">
+    <button class="nav-item" data-page="dashboard">
+      <svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>
+      Dashboard
+    </button>
+    <button class="nav-item" data-page="board">
+      <svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="2" width="5" height="6" rx="1"/><rect x="9" y="2" width="5" height="9" rx="1"/><rect x="2" y="10" width="5" height="4" rx="1"/><rect x="9" y="13" width="5" height="1" rx="0.5"/></svg>
+      Tablero
+    </button>
+    <button class="nav-item" data-page="week">
+      <svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M2 6.5h12M5.5 3V1.5M10.5 3V1.5"/></svg>
+      Semana
+    </button>
+    <button class="nav-item" data-page="people">
+      <svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"/><path d="M2 13c0-2 2-3.5 4-3.5s4 1.5 4 3.5"/><circle cx="11" cy="5" r="2"/></svg>
+      Equipo
+    </button>
+    <button class="nav-item" data-page="settings">
+      <svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2"/></svg>
+      Ajustes
+    </button>
+  </div>
+</nav>
+
+<div class="toast-host" id="toastHost"></div>
+<div id="modalHost"></div>
+
+<script>
+/* =============================================================
+ *  Seguimiento SmartWork
+ *  Vanilla JS + Supabase
+ * ============================================================ */
+
+// ----- Supabase config -----
+// Credenciales cargadas desde config.js (no subir config.js a GitHub)
+// Si config.js no existe, la app corre en modo demo local.
+const SUPABASE_URL      = window.SW_CONFIG?.url      || '';
+const SUPABASE_ANON_KEY = window.SW_CONFIG?.anonKey  || '';
+
+// Schema esperado:
+//   projects (id uuid pk, name text, color text, created_at timestamptz)
+//   people   (id uuid pk, name text, color text, created_at timestamptz)
+//   tasks    (id uuid pk, text text, project_id uuid, author_id uuid,
+//             priority text check in ('alta','media','baja'),
+//             done boolean default false,
+//             started_at timestamptz default now(),
+//             completed_at timestamptz null,
+//             created_at timestamptz default now())
+
+let sb = null;
+try {
+  if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  }
+} catch (e) { console.warn('Supabase init failed', e); }
+
+// ----- State -----
+const state = {
+  projects: [],
+  people: [],
+  tasks: [],
+  time_entries: [],
+  time_sessions: [],
+  filters: { project: '', author: '', priority: '', status: '' },
+  page: 'board',
+  settings: loadSettings(),
+  online: false,
+};
+
+const PROJECT_COLORS = [
+  '#5B8DEF', '#8B5CF6', '#EC4899', '#F43F5E',
+  '#F97316', '#F59E0B', '#10B981', '#06B6D4',
+  '#64748B', '#84CC16'
+];
+const AVATAR_COLORS = [
+  '#5B8DEF', '#8B5CF6', '#EC4899', '#F43F5E',
+  '#F97316', '#F59E0B', '#10B981', '#06B6D4',
+  '#64748B', '#84CC16'
+];
+
+// ----- Settings -----
+function loadSettings() {
+  try {
+    return Object.assign(
+      { showDone: true, notifs: false },
+      JSON.parse(localStorage.getItem('sw_settings') || '{}')
+    );
+  } catch { return { showDone: true, notifs: false }; }
+}
+function saveSettings() { localStorage.setItem('sw_settings', JSON.stringify(state.settings)); }
+
+// ----- Helpers -----
+const $ = sel => document.querySelector(sel);
+const $$ = sel => Array.from(document.querySelectorAll(sel));
+function uuid() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random()*16|0, v = c==='x'?r:(r&0x3|0x8); return v.toString(16);
+  });
+}
+function initials(name) {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0,2).toUpperCase();
+  return (parts[0][0] + parts[parts.length-1][0]).toUpperCase();
+}
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function fmtTime(ms) {
+  if (!ms || ms < 0) ms = 0;
+  const total = Math.floor(ms/1000);
+  const h = String(Math.floor(total/3600)).padStart(2,'0');
+  const m = String(Math.floor((total%3600)/60)).padStart(2,'0');
+  const s = String(total%60).padStart(2,'0');
+  return `${h}:${m}:${s}`;
+}
+function dueInfo(t) {
+  if (!t.due_date) return null;
+  const due = new Date(t.due_date + 'T23:59:59');
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+  const diffDays = Math.round((dueDay - today) / 86400000);
+  let cls = '', label = '';
+  const fmt = due.toLocaleDateString('es', { day:'2-digit', month:'short' });
+  if (t.done) { cls = ''; label = `Entrega ${fmt}`; }
+  else if (diffDays < 0) { cls = 'overdue'; label = `Vencida ${fmt}`; }
+  else if (diffDays === 0) { cls = 'today'; label = `Hoy ${fmt}`; }
+  else if (diffDays <= 2) { cls = 'soon'; label = `En ${diffDays}d · ${fmt}`; }
+  else { cls = ''; label = `Entrega ${fmt}`; }
+  return { cls, label };
+}
+
+// --- Session helpers ---
+function sessionsFor(taskId) {
+  return state.time_sessions.filter(s => s.task_id === taskId);
+}
+function activeSession(taskId) {
+  return state.time_sessions.find(s => s.task_id === taskId && !s.ended_at) || null;
+}
+function elapsedFor(task) {
+  const sessions = sessionsFor(task.id);
+  if (!sessions.length) return 0;
+  return sessions.reduce((acc, s) => {
+    const start = new Date(s.started_at).getTime();
+    const end   = s.ended_at ? new Date(s.ended_at).getTime() : Date.now();
+    return acc + Math.max(0, end - start);
+  }, 0);
+}
+function realHoursFor(task) {
+  return +(elapsedFor(task) / 3600000).toFixed(2);
+}
+function taskState(t) {
+  if (t.done) return 'done';
+  if (activeSession(t.id)) return 'running'; // cronómetro activo ahora
+  if (t.started_at) return 'paused';         // iniciada pero pausada
+  return 'idle';
+}
+
+// ----- Toast -----
+function toast(msg, kind='info') {
+  const t = document.createElement('div');
+  t.className = 'toast' + (kind === 'error' ? ' error' : '');
+  t.textContent = msg;
+  $('#toastHost').appendChild(t);
+  setTimeout(() => { t.style.opacity='0'; t.style.transform='translateY(8px)'; }, 2200);
+  setTimeout(() => t.remove(), 2500);
+}
+
+// ----- Connection indicator -----
+function setConn(online) {
+  state.online = online;
+  const dot = $('#connDot');
+  const lbl = $('#connLabel');
+  dot.classList.toggle('live', online);
+  dot.classList.toggle('offline', !online);
+  lbl.textContent = online ? 'En vivo' : (sb ? 'Reconectando…' : 'Modo demo');
+  // Settings page mirror
+  const desc = $('#setConnDesc');
+  const badge = $('#setConnBadge');
+  if (desc && badge) {
+    if (!sb) {
+      desc.textContent = 'Sin credenciales — modo demo local.';
+      badge.className = 'badge media';
+      badge.querySelector('span:last-child').textContent = 'Demo';
+    } else if (online) {
+      desc.textContent = 'Conectado y suscrito a cambios en tiempo real.';
+      badge.className = 'badge baja';
+      badge.querySelector('span:last-child').textContent = 'En línea';
+    } else {
+      desc.textContent = 'Sin conexión con Supabase.';
+      badge.className = 'badge alta';
+      badge.querySelector('span:last-child').textContent = 'Desconectado';
+    }
+  }
+}
+
+// ----- Data layer (Supabase + local fallback) -----
+const localStore = {
+  load() {
+    try {
+      const data = JSON.parse(localStorage.getItem('sw_data') || '{}');
+      state.projects     = data.projects     || [];
+      state.people       = data.people       || [];
+      state.tasks        = data.tasks        || [];
+      state.time_entries = data.time_entries || [];
+      state.time_sessions= data.time_sessions|| [];
+    } catch {}
+  },
+  save() {
+    localStorage.setItem('sw_data', JSON.stringify({
+      projects: state.projects, people: state.people,
+      tasks: state.tasks, time_entries: state.time_entries,
+      time_sessions: state.time_sessions
+    }));
+  }
+};
+
+async function loadAll() {
+  if (sb) {
+    try {
+      const [p, pe, t, te, ts] = await Promise.all([
+        sb.from('projects').select('*').order('created_at', { ascending: true }),
+        sb.from('people').select('*').order('created_at', { ascending: true }),
+        sb.from('tasks').select('*').order('created_at', { ascending: false }),
+        sb.from('time_entries').select('*').order('work_date', { ascending: false }),
+        sb.from('time_sessions').select('*').order('started_at', { ascending: false }),
+      ]);
+      if (p.error || pe.error || t.error || te.error || ts.error)
+        throw (p.error || pe.error || t.error || te.error || ts.error);
+      state.projects      = p.data  || [];
+      state.people        = pe.data || [];
+      state.tasks         = t.data  || [];
+      state.time_entries  = te.data || [];
+      state.time_sessions = ts.data || [];
+      setConn(true);
+    } catch (e) {
+      console.warn('Supabase load failed, fallback to local', e);
+      setConn(false);
+      localStore.load();
+    }
+  } else {
+    localStore.load();
+    setConn(false);
+  }
+  renderAll();
+}
+
+async function dbInsert(table, row) {
+  // Optimistic: agrega al estado local inmediatamente
+  const arr = state[table];
+  if (table === 'tasks') arr.unshift(row); else arr.push(row);
+  renderAll();
+  if (sb) {
+    try {
+      const { error } = await sb.from(table).insert(row);
+      if (error) {
+        toast('Error: ' + error.message, 'error');
+        // revertir
+        state[table] = arr.filter(r => r.id !== row.id);
+        renderAll();
+        return null;
+      }
+      setConn(true);
+    } catch (e) {
+      toast('Sin conexión — cambio guardado local', 'error');
+      setConn(false);
+    }
+  }
+  localStore.save();
+  return row;
+}
+async function dbUpdate(table, id, patch) {
+  // Optimistic
+  const arr = state[table];
+  const idx = arr.findIndex(r => r.id === id);
+  const prev = idx >= 0 ? { ...arr[idx] } : null;
+  if (idx >= 0) Object.assign(arr[idx], patch);
+  renderAll();
+  if (sb) {
+    try {
+      const { error } = await sb.from(table).update(patch).eq('id', id);
+      if (error) {
+        toast('Error: ' + error.message, 'error');
+        if (prev && idx >= 0) arr[idx] = prev;
+        renderAll();
+        return null;
+      }
+      setConn(true);
+    } catch (e) {
+      toast('Sin conexión — cambio guardado local', 'error');
+      setConn(false);
+    }
+  }
+  localStore.save();
+  return arr[idx];
+}
+async function dbDelete(table, id) {
+  const arr = state[table];
+  const prev = arr.find(r => r.id === id);
+  state[table] = arr.filter(r => r.id !== id);
+  renderAll();
+  if (sb) {
+    try {
+      const { error } = await sb.from(table).delete().eq('id', id);
+      if (error) {
+        toast('Error: ' + error.message, 'error');
+        if (prev) state[table].push(prev);
+        renderAll();
+        return false;
+      }
+      setConn(true);
+    } catch (e) {
+      toast('Sin conexión — cambio guardado local', 'error');
+      setConn(false);
+    }
+  }
+  localStore.save();
+  return true;
+}
+
+// ----- Realtime -----
+function subscribeRealtime() {
+  if (!sb) return;
+  sb.channel('sw-changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' },      payload => onRT('projects', payload))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'people' },        payload => onRT('people', payload))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' },         payload => onRT('tasks', payload))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'time_entries' },  payload => onRT('time_entries', payload))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'time_sessions' }, payload => onRT('time_sessions', payload))
+    .subscribe(status => {
+      if (status === 'SUBSCRIBED') setConn(true);
+    });
+}
+function onRT(table, { eventType, new: nu, old }) {
+  const key = table;
+  const arr = state[key];
+  if (eventType === 'INSERT') {
+    if (!arr.find(r => r.id === nu.id)) {
+      if (table === 'tasks') arr.unshift(nu); else arr.push(nu);
+    }
+  } else if (eventType === 'UPDATE') {
+    const idx = arr.findIndex(r => r.id === nu.id);
+    if (idx >= 0) arr[idx] = nu;
+  } else if (eventType === 'DELETE') {
+    state[key] = arr.filter(r => r.id !== old.id);
+  }
+  renderAll();
+}
+
+// ============================================================
+//  Rendering
+// ============================================================
+
+function renderAll() {
+  renderNavBadges();
+  renderTaskFormSelects();
+  renderFilters();
+  renderTasks();
+  renderStats();
+  renderProjects();
+  renderPeople();
+  renderCapacityCards();
+  renderWeek();
+  renderDashboard();
+}
+
+// ============================================================
+//  Dashboard
+// ============================================================
+const CAP_HOURS_DAY = 8;
+
+function renderDashboard() {
+  const host = $('#dashContent');
+  if (!host) return;
+
+  const today = isoDate(new Date());
+  const now = new Date();
+
+  // ── helpers ──
+  const allTasks = state.tasks;
+  const pending  = allTasks.filter(t => !t.done);
+  const done     = allTasks.filter(t => t.done);
+
+  // 1. ALERTAS: sobrecargas esta semana + vencidas
+  const days = getWeekBounds(0);
+  const weekDates = new Set(days.map(isoDate));
+
+  const alerts = [];
+
+  // Tareas vencidas sin completar
+  const overdueAll = pending.filter(t => t.due_date && new Date(t.due_date+'T23:59:59') < now);
+  overdueAll.forEach(t => {
+    const p = findPerson(t.author_id);
+    alerts.push({ color:'var(--danger)', msg: `<strong>${p?.name||'?'}</strong> — "${escapeHtml(t.text)}" venció el ${new Date(t.due_date+'T00:00').toLocaleDateString('es',{day:'2-digit',month:'short'})}` });
+  });
+
+  // Sobrecarga diaria esta semana (est. horas > 8h en un día)
+  state.people.forEach(p => {
+    days.forEach(d => {
+      const ds = isoDate(d);
+      const dayTasks = pending.filter(t => t.author_id === p.id && t.due_date === ds);
+      const totalEst = dayTasks.reduce((a, t) => a + (t.estimated_hours || 0), 0);
+      if (totalEst > CAP_HOURS_DAY) {
+        alerts.push({ color:'var(--warn)', msg: `<strong>${p.name}</strong> tiene ${totalEst}h estimadas el ${d.toLocaleDateString('es',{weekday:'short',day:'2-digit',month:'short'})} (cap. ${CAP_HOURS_DAY}h)` });
+      }
+    });
+  });
+
+  // Tareas sin fecha ni estimado (backlog sucio)
+  const noInfo = pending.filter(t => !t.due_date && !t.estimated_hours);
+  if (noInfo.length > 0) alerts.push({ color:'var(--fg-subtle)', msg: `${noInfo.length} tarea${noInfo.length>1?'s':''} sin fecha ni estimado — difícil de planificar` });
+
+  const alertsHtml = alerts.length === 0
+    ? `<div style="color:var(--fg-subtle);font-size:13px;padding:8px 0;">✓ Sin alertas activas</div>`
+    : alerts.map(a => `<div class="dash-alert-row"><span class="alert-dot" style="background:${a.color};"></span><span>${a.msg}</span></div>`).join('');
+
+  // 2. CAPACIDAD SEMANAL por persona
+  const capRows = state.people.map(p => {
+    const weekTasks = pending.filter(t => t.author_id === p.id && t.due_date && weekDates.has(t.due_date));
+    const estH = weekTasks.reduce((a, t) => a + (t.estimated_hours || 0), 0);
+    const capWeek = CAP_HOURS_DAY * 5; // 40h
+    const pct = Math.min(100, Math.round(estH / capWeek * 100));
+    const barColor = pct >= 90 ? 'var(--danger)' : pct >= 70 ? 'var(--warn)' : 'var(--ok)';
+    const backlog = pending.filter(t => t.author_id === p.id && !t.due_date).length;
+    return `
+      <div class="cap-person-row">
+        <span class="avatar" style="background:${p.color};flex-shrink:0;">${initials(p.name)}</span>
+        <span style="font-size:13px;font-weight:500;min-width:100px;">${escapeHtml(p.name)}</span>
+        <div class="cap-bar-wrap">
+          <div class="cap-bar-fill" style="width:${pct}%;background:${barColor};"></div>
+        </div>
+        <span class="mono" style="font-size:12px;min-width:64px;text-align:right;color:${barColor};">${estH}h / ${capWeek}h</span>
+        ${backlog > 0 ? `<span style="font-size:11px;color:var(--fg-subtle);min-width:64px;">+${backlog} sin fecha</span>` : '<span style="min-width:64px;"></span>'}
+      </div>`;
+  }).join('') || `<div style="color:var(--fg-subtle);font-size:13px;padding:8px 0;">Sin personas registradas</div>`;
+
+  // 3. EFICIENCIA (est vs real en tareas completadas)
+  const effRows = state.people.map(p => {
+    const myDone = done.filter(t => t.author_id === p.id && t.estimated_hours);
+    if (!myDone.length) return null;
+    const totalEst = myDone.reduce((a, t) => a + t.estimated_hours, 0);
+    const totalReal = myDone.reduce((a, t) => a + elapsedFor(t)/3600000, 0);
+    const ratio = totalReal / totalEst; // <1 más rápido, >1 más lento
+    const pct = Math.round(ratio * 100);
+    const label = ratio <= 1.05 ? 'En tiempo' : ratio <= 1.3 ? 'Leve retraso' : 'Sobre tiempo';
+    const bg = ratio <= 1.05 ? 'var(--ok-soft)' : ratio <= 1.3 ? 'var(--warn-soft)' : 'var(--danger-soft)';
+    const fg = ratio <= 1.05 ? 'var(--ok)' : ratio <= 1.3 ? 'oklch(0.45 0.13 70)' : 'var(--danger)';
+    return `
+      <div class="eff-row">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="avatar" style="background:${p.color};">${initials(p.name)}</span>
+          <span style="font-weight:500;">${escapeHtml(p.name)}</span>
+          <span style="font-size:11px;color:var(--fg-subtle);">${myDone.length} tarea${myDone.length>1?'s':''}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:12px;color:var(--fg-muted);" class="mono">${totalReal.toFixed(1)}h real / ${totalEst.toFixed(1)}h est.</span>
+          <span class="eff-badge" style="background:${bg};color:${fg};">${label} (${pct}%)</span>
+        </div>
+      </div>`;
+  }).filter(Boolean).join('') || `<div style="color:var(--fg-subtle);font-size:13px;padding:8px 0;">Completa tareas con estimado para ver eficiencia</div>`;
+
+  // 4. PRÓXIMAS A VENCER (próximos 3 días, no completadas)
+  const upcoming = pending
+    .filter(t => t.due_date)
+    .map(t => ({ t, diff: Math.round((new Date(t.due_date+'T23:59:59') - now) / 86400000) }))
+    .filter(x => x.diff >= 0 && x.diff <= 3)
+    .sort((a, b) => a.diff - b.diff)
+    .slice(0, 6);
+
+  const upcomingHtml = upcoming.length === 0
+    ? `<div style="color:var(--fg-subtle);font-size:13px;padding:8px 0;">Sin entregas en los próximos 3 días</div>`
+    : upcoming.map(({ t, diff }) => {
+        const p = findPerson(t.author_id);
+        const proj = findProject(t.project_id);
+        const dayLabel = diff === 0 ? 'Hoy' : diff === 1 ? 'Mañana' : `En ${diff}d`;
+        const color = diff === 0 ? 'var(--danger)' : diff === 1 ? 'var(--warn)' : 'var(--accent)';
+        const st = taskState(t);
+        const stLabel = st === 'running' ? '▶ En curso' : '○ Sin iniciar';
+        return `
+          <div class="dash-alert-row">
+            <span class="alert-dot" style="background:${color};"></span>
+            <div style="flex:1;min-width:0;">
+              <div style="font-weight:500;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(t.text)}</div>
+              <div style="font-size:11px;color:var(--fg-muted);margin-top:1px;">${proj?.name||''} · ${p?.name||'?'} · <span style="color:${color};font-weight:600;">${dayLabel}</span></div>
+            </div>
+            <span style="font-size:11px;color:var(--fg-subtle);white-space:nowrap;">${stLabel}</span>
+          </div>`;
+      }).join('');
+
+  // 5. KPI strip
+  const totalEstWeek = pending.filter(t => t.due_date && weekDates.has(t.due_date)).reduce((a,t)=>a+(t.estimated_hours||0),0);
+  const totalCapWeek = state.people.length * CAP_HOURS_DAY * 5;
+  const capPct = totalCapWeek ? Math.round(totalEstWeek/totalCapWeek*100) : 0;
+  const runningNow = pending.filter(t=>t.started_at).length;
+  const avgEff = (() => {
+    const d2 = done.filter(t=>t.estimated_hours && t.started_at && t.completed_at);
+    if (!d2.length) return null;
+    const r = d2.reduce((a,t)=>a+(elapsedFor(t)/3600000)/t.estimated_hours,0)/d2.length;
+    return Math.round(r*100);
+  })();
+
+  const kpiHtml = `
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">
+      ${[
+        { label:'Tareas activas', value: pending.length, sub: `${runningNow} en curso ahora`, color:'var(--accent)' },
+        { label:'Completadas', value: done.length, sub: `${allTasks.length} total`, color:'var(--ok)' },
+        { label:'Carga semana actual', value: `${capPct}%`, sub: `${totalEstWeek}h est. / ${totalCapWeek}h cap.`, color: capPct>=90?'var(--danger)':capPct>=70?'var(--warn)':'var(--ok)' },
+        { label:'Eficiencia promedio', value: avgEff ? `${avgEff}%` : '—', sub: avgEff ? (avgEff<=105?'En tiempo':avgEff<=130?'Leve retraso':'Sobre tiempo') : 'Sin datos aún', color: avgEff ? (avgEff<=105?'var(--ok)':avgEff<=130?'var(--warn)':'var(--danger)') : 'var(--fg-subtle)' },
+      ].map(k=>`
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;">
+          <div style="font-size:11px;color:var(--fg-muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em;">${k.label}</div>
+          <div style="font-size:26px;font-weight:700;letter-spacing:-.02em;color:${k.color};margin:6px 0 2px;" class="mono">${k.value}</div>
+          <div style="font-size:12px;color:var(--fg-subtle);">${k.sub}</div>
+        </div>`).join('')}
+    </div>`;
+
+  host.innerHTML = kpiHtml + `
+    <div class="dash-grid">
+      <div class="dash-panel">
+        <div class="dash-panel-header">⚠ Alertas <span style="font-weight:400;color:var(--fg-subtle);text-transform:none;">${alerts.length} activa${alerts.length!==1?'s':''}</span></div>
+        <div class="dash-panel-body">${alertsHtml}</div>
+      </div>
+      <div class="dash-panel">
+        <div class="dash-panel-header">📅 Próximas entregas <span style="font-weight:400;color:var(--fg-subtle);text-transform:none;">3 días</span></div>
+        <div class="dash-panel-body">${upcomingHtml}</div>
+      </div>
+    </div>
+    <div class="dash-grid">
+      <div class="dash-panel">
+        <div class="dash-panel-header">👤 Capacidad esta semana <span style="font-weight:400;color:var(--fg-subtle);text-transform:none;">${CAP_HOURS_DAY}h/día · 40h/semana</span></div>
+        <div class="dash-panel-body">${capRows}</div>
+      </div>
+      <div class="dash-panel">
+        <div class="dash-panel-header">⚡ Eficiencia estimado vs real</div>
+        <div class="dash-panel-body">${effRows}</div>
+      </div>
+    </div>`;
+}
+
+function renderNavBadges() {
+  const sub = $('#boardSub');
+  const total = state.tasks.length;
+  const open = state.tasks.filter(t => !t.done).length;
+  sub.textContent = total === 0
+    ? 'Aún no hay tareas — agrega la primera abajo.'
+    : `${open} pendiente${open===1?'':'s'} de ${total} tarea${total===1?'':'s'}`;
+}
+
+function renderTaskFormSelects() {
+  const proj = $('#ntProject');
+  const auth = $('#ntAuthor');
+  const keep = (sel) => sel.value;
+  const pVal = keep(proj), aVal = keep(auth);
+  proj.innerHTML = '<option value="">Proyecto…</option>' +
+    state.projects.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+  auth.innerHTML = '<option value="">Autor…</option>' +
+    state.people.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+  proj.value = pVal; auth.value = aVal;
+}
+
+function renderFilters() {
+  const fp = $('#fProject'), fa = $('#fAuthor');
+  const pV = state.filters.project, aV = state.filters.author;
+  fp.innerHTML = '<option value="">Todos</option>' +
+    state.projects.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+  fa.innerHTML = '<option value="">Todos</option>' +
+    state.people.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+  fp.value = pV; fa.value = aV;
+  $('#fPriority').value = state.filters.priority;
+}
+
+// Tareas filtradas por proyecto/autor/prioridad (sin filtro de status — para stats)
+function tasksByStructuralFilters() {
+  return state.tasks.filter(t => {
+    if (state.filters.project && t.project_id !== state.filters.project) return false;
+    if (state.filters.author && t.author_id !== state.filters.author) return false;
+    if (state.filters.priority && t.priority !== state.filters.priority) return false;
+    return true;
+  });
+}
+
+function filteredTasks() {
+  return tasksByStructuralFilters().filter(t => {
+    if (state.filters.status === 'pending' && t.done) return false;
+    if (state.filters.status === 'done' && !t.done) return false;
+    if (state.filters.status === 'running' && (t.done || !t.started_at)) return false;
+    return true;
+  });
+}
+
+function renderStats() {
+  // Stats reflejan los filtros estructurales (proyecto/autor/prioridad) pero IGNORAN
+  // el filtro de status para que los conteos sean siempre verdaderos.
+  const all = tasksByStructuralFilters();
+  const pending = all.filter(t => !t.done);
+  const done = all.filter(t => t.done);
+  const total = done.reduce((acc, t) => acc + elapsedFor(t), 0);
+
+  $('#statPending').textContent = pending.length;
+  $('#statDone').textContent = done.length;
+  $('#statTime').textContent = fmtTime(total);
+
+  const running = all.filter(t => t.started_at && !t.done).length;
+  const idle = pending.length - running;
+  $('#statPendingMeta').textContent = running > 0
+    ? `${running} en curso · ${idle} sin iniciar`
+    : (idle > 0 ? `${idle} sin iniciar` : 'todo al día');
+  $('#statDoneMeta').textContent = all.length
+    ? `${Math.round(done.length / all.length * 100)}% del total`
+    : 'finalizadas';
+  $('#statTimeMeta').textContent = done.length
+    ? `de ${done.length} tarea${done.length===1?'':'s'} completada${done.length===1?'':'s'}`
+    : 'sin completadas aún';
+}
+
+function findProject(id) { return state.projects.find(p => p.id === id); }
+function findPerson(id) { return state.people.find(p => p.id === id); }
+
+function renderTasks() {
+  const host = $('#taskListHost');
+  const tasks = filteredTasks();
+  if (tasks.length === 0) {
+    host.innerHTML = `
+      <div class="empty">
+        <div class="empty-title">No hay tareas que mostrar</div>
+        <div>Crea una nueva tarea o ajusta los filtros.</div>
+      </div>`;
+    return;
+  }
+  const idle = tasks.filter(t => !t.done && !t.started_at);
+  const running = tasks.filter(t => !t.done && t.started_at);
+  const done = tasks.filter(t => t.done);
+
+  let html = '';
+  if (running.length) {
+    html += `<div class="section-heading">En curso <span class="count">${running.length}</span></div>`;
+    html += `<div class="task-list">${running.map(taskHTML).join('')}</div>`;
+  }
+  if (idle.length) {
+    html += `<div class="section-heading">Sin iniciar <span class="count">${idle.length}</span></div>`;
+    html += `<div class="task-list">${idle.map(taskHTML).join('')}</div>`;
+  }
+  if (done.length && state.settings.showDone) {
+    html += `<div class="section-heading">Completadas <span class="count">${done.length}</span></div>`;
+    html += `<div class="task-list">${done.map(taskHTML).join('')}</div>`;
+  }
+  host.innerHTML = html;
+}
+
+function taskHTML(t) {
+  const project = findProject(t.project_id);
+  const person  = findPerson(t.author_id);
+  const st      = taskState(t);
+  const personColor = person?.color || '#94a3b8';
+  const fmtDateShort = iso => new Date(iso.slice(0,10)+'T00:00:00').toLocaleDateString('es', { weekday:'short', day:'2-digit', month:'short' });
+
+  const checkBtn = (() => {
+    if (st === 'idle') return `
+      <button class="check idle" data-act="start" title="Iniciar cronómetro" aria-label="Iniciar">
+        <svg viewBox="0 0 12 12" fill="currentColor"><path d="M4 3L9 6L4 9Z"/></svg>
+      </button>`;
+    if (st === 'running') return `
+      <button class="check running" data-act="pause" title="Pausar" aria-label="Pausar">
+        <svg viewBox="0 0 12 12" fill="currentColor"><rect x="2.5" y="2" width="2.5" height="8" rx=".5"/><rect x="7" y="2" width="2.5" height="8" rx=".5"/></svg>
+      </button>`;
+    if (st === 'paused') return `
+      <button class="check idle" data-act="resume" title="Reanudar" aria-label="Reanudar" style="border-color:var(--warn);color:var(--warn);">
+        <svg viewBox="0 0 12 12" fill="currentColor"><path d="M4 3L9 6L4 9Z"/></svg>
+      </button>`;
+    return `
+      <button class="check checked" data-act="toggle" aria-label="Reabrir" title="Reabrir">
+        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5 5 9l4.5-5"/></svg>
+      </button>`;
+  })();
+
+  const completeBtn = (st === 'running' || st === 'paused') ? `
+    <button class="btn btn-sm" data-act="complete-confirm" title="Completar tarea"
+      style="background:var(--ok);color:white;border:none;font-size:11px;padding:4px 10px;border-radius:6px;font-weight:600;white-space:nowrap;display:flex;align-items:center;gap:4px;">
+      <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:10px;height:10px;flex-shrink:0;"><path d="M2.5 6.5 5 9l4.5-5"/></svg>
+      Completar
+    </button>` : '';
+
+  const totalMs  = elapsedFor(t);
+  const totalH   = totalMs ? +(totalMs / 3600000).toFixed(2) : 0;
+  const estH     = t.estimated_hours;
+  const sessions = sessionsFor(t.id);
+
+  const byDate = {};
+  sessions.forEach(s => {
+    const d = s.started_at.slice(0,10);
+    if (!byDate[d]) byDate[d] = 0;
+    const start = new Date(s.started_at).getTime();
+    const end   = s.ended_at ? new Date(s.ended_at).getTime() : Date.now();
+    byDate[d] += Math.max(0, end - start);
+  });
+  const sessionsHtml = Object.entries(byDate)
+    .sort(([a],[b]) => a < b ? -1 : 1)
+    .map(([date, ms]) => `
+      <div class="tlog-entry">
+        <span class="tlog-entry-hours">${+(ms/3600000).toFixed(2)}h</span>
+        <span class="tlog-entry-date">${fmtDateShort(date)}</span>
+      </div>`).join('');
+
+  const diff = (estH && totalH > 0) ? +(totalH - estH).toFixed(2) : null;
+  const diffColor = diff === null ? '' : diff > 0 ? 'var(--danger)' : 'var(--ok)';
+  const diffLabel = diff === null ? '' : diff > 0 ? `+${diff}h sobre est.` : `${Math.abs(diff)}h bajo est.`;
+
+  let timeBlock = '';
+  if (st === 'idle' && !sessions.length) {
+    timeBlock = `<div class="time-block idle"><span class="time-hint">${estH ? `Est. ${estH}h` : 'Sin iniciar'}</span></div>`;
+  } else if (st === 'running') {
+    timeBlock = `
+      <div class="time-block running" style="min-width:200px;">
+        <div class="time-row">
+          <span class="time-key">⏱ En curso</span>
+          <span class="time-val mono" id="live-${t.id}" style="font-size:14px;font-weight:700;color:var(--accent);">${fmtTime(totalMs)}</span>
+        </div>
+        ${estH ? `<div class="time-row dim"><span class="time-key">Estimado</span><span class="time-val mono">${estH}h</span></div>` : ''}
+        ${diffLabel ? `<div class="time-row dim"><span class="time-key" style="color:${diffColor};">${diffLabel}</span></div>` : ''}
+        ${sessionsHtml ? `<div class="tlog-list" style="margin-top:5px;">${sessionsHtml}</div>` : ''}
+      </div>`;
+  } else if (st === 'paused') {
+    timeBlock = `
+      <div class="time-block" style="min-width:200px;border-color:var(--warn);background:var(--warn-soft);">
+        <div class="time-row">
+          <span class="time-key" style="color:var(--warn);">⏸ Pausada</span>
+          <span class="time-val mono" style="font-weight:700;">${fmtTime(totalMs)}</span>
+        </div>
+        ${estH ? `<div class="time-row dim"><span class="time-key">Estimado</span><span class="time-val mono">${estH}h</span></div>` : ''}
+        ${diffLabel ? `<div class="time-row dim"><span class="time-key" style="color:${diffColor};">${diffLabel}</span></div>` : ''}
+        ${sessionsHtml ? `<div class="tlog-list" style="margin-top:5px;">${sessionsHtml}</div>` : ''}
+      </div>`;
+  } else {
+    timeBlock = `
+      <div class="time-block done" style="min-width:200px;">
+        <div class="time-row">
+          <span class="time-key">Total real</span>
+          <span class="time-val mono" style="font-weight:700;">${fmtTime(totalMs)} <span style="font-size:11px;opacity:.7;">(${totalH}h)</span></span>
+        </div>
+        ${estH ? `<div class="time-row"><span class="time-key">Estimado</span><span class="time-val mono">${estH}h</span></div>` : ''}
+        ${diffLabel ? `<div class="time-row total"><span class="time-key" style="color:${diffColor};">${diffLabel}</span></div>` : ''}
+        ${sessionsHtml ? `<div class="tlog-list" style="margin-top:5px;">${sessionsHtml}</div>` : ''}
+      </div>`;
+  }
+
+  return `
+    <div class="task state-${st}" data-id="${t.id}">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex-shrink:0;">
+        ${checkBtn}
+        ${completeBtn}
+      </div>
+      <div class="task-body">
+        <div class="task-text">${escapeHtml(t.text)}</div>
+        <div class="task-meta">
+          ${project ? `<span class="project-pill"><span class="project-dot" style="background:${project.color}"></span>${escapeHtml(project.name)}</span>` : `<span class="meta-item" style="color:var(--fg-subtle)">Sin proyecto</span>`}
+          ${person ? `<span class="meta-item"><span class="avatar" style="background:${personColor}">${initials(person.name)}</span>${escapeHtml(person.name)}</span>` : ''}
+          <span class="badge ${t.priority}"><span class="b-dot"></span>${t.priority}</span>
+          ${(() => { const d = dueInfo(t); return d ? `<span class="due-badge ${d.cls}"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M6 2v3M10 2v3"/></svg>${escapeHtml(d.label)}</span>` : ''; })()}
+        </div>
+      </div>
+      ${timeBlock}
+      <div class="task-actions">
+        <button class="icon-btn" data-act="edit-task" aria-label="Editar tarea" title="Editar tarea">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2.5l2.5 2.5L5 13.5 2 14l.5-3z"/></svg>
+        </button>
+        <button class="icon-btn danger" data-act="delete" aria-label="Eliminar">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h10M6 5V3.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V5M5 5l.7 8.1a1 1 0 0 0 1 .9h2.6a1 1 0 0 0 1-.9L11 5"/></svg>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+
+function renderProjects() {
+  const list = $('#projectList');
+  if (state.projects.length === 0) {
+    list.innerHTML = `<div class="empty"><div class="empty-title">Sin proyectos todavía</div><div>Crea uno arriba para empezar a organizar las tareas.</div></div>`;
+  } else {
+    list.innerHTML = state.projects.map(p => {
+      const taskCount = state.tasks.filter(t => t.project_id === p.id).length;
+      return `
+        <div class="row" data-id="${p.id}">
+          <div class="row-name">
+            <span class="color-swatch" style="background:${p.color}"></span>
+            <span>${escapeHtml(p.name)}</span>
+          </div>
+          <div class="row-meta">${taskCount} tarea${taskCount===1?'':'s'}</div>
+          <div class="task-actions">
+            <button class="icon-btn" data-act="edit-project" aria-label="Editar">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2.5l2.5 2.5L5 13.5 2 14l.5-3z"/></svg>
+            </button>
+            <button class="icon-btn danger" data-act="del-project" aria-label="Eliminar">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h10M6 5V3.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V5M5 5l.7 8.1a1 1 0 0 0 1 .9h2.6a1 1 0 0 0 1-.9L11 5"/></svg>
+            </button>
+          </div>
+        </div>`;
+    }).join('');
+  }
+  // Color swatches in form
+  const cp = $('#npColors');
+  if (!cp.dataset.ready) {
+    cp.innerHTML = PROJECT_COLORS.map((c, i) =>
+      `<button type="button" class="color-chip ${i===0?'selected':''}" data-color="${c}" style="background:${c}"></button>`
+    ).join('');
+    cp.dataset.ready = '1';
+    cp.dataset.selected = PROJECT_COLORS[0];
+    cp.addEventListener('click', e => {
+      const chip = e.target.closest('.color-chip');
+      if (!chip) return;
+      cp.querySelectorAll('.color-chip').forEach(x => x.classList.remove('selected'));
+      chip.classList.add('selected');
+      cp.dataset.selected = chip.dataset.color;
+    });
+  }
+}
+
+function renderCapacityCards() {
+  const host = document.getElementById('capacityCards');
+  if (!host) return;
+  if (state.people.length === 0) { host.innerHTML = ''; return; }
+
+  // Dot legend (rendered once above cards)
+  const legend = `
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px;font-size:11px;color:var(--fg-muted);">
+      <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:50%;background:var(--accent);display:inline-block;"></span>En curso</span>
+      <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:50%;background:var(--border-strong);display:inline-block;"></span>Sin iniciar</span>
+      <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:50%;background:var(--ok);display:inline-block;"></span>Completada</span>
+      <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:50%;background:var(--danger);display:inline-block;"></span>Vencida</span>
+    </div>`;
+
+  const cards = state.people.map(p => {
+    const myTasks = state.tasks.filter(t => t.author_id === p.id);
+    const done    = myTasks.filter(t => t.done);
+    const running = myTasks.filter(t => !t.done && t.started_at);
+    const idle    = myTasks.filter(t => !t.done && !t.started_at);
+    const overdue = myTasks.filter(t => !t.done && t.due_date && new Date(t.due_date + 'T23:59:59') < new Date());
+    const totalMs = done.reduce((a, t) => a + elapsedFor(t), 0);
+    const avgMs   = done.length ? totalMs / done.length : 0;
+
+    // Status label + border color for the card
+    let statusLabel = '', statusColor = 'var(--border)';
+    if (overdue.length > 0) {
+      statusLabel = `${overdue.length} vencida${overdue.length>1?'s':''}`;
+      statusColor = 'var(--danger)';
+    } else if (running.length > 0) {
+      statusLabel = `${running.length} en curso`;
+      statusColor = 'var(--accent)';
+    } else if (idle.length > 0) {
+      statusLabel = `${idle.length} pendiente${idle.length>1?'s':''}`;
+      statusColor = 'var(--border-strong)';
+    } else if (done.length > 0) {
+      statusLabel = 'Al día ✓';
+      statusColor = 'var(--ok)';
+    } else {
+      statusLabel = 'Sin tareas';
+    }
+
+    // Task dots — each task is a dot colored by state
+    const MAX_DOTS = 20;
+    const allDots = [
+      ...running.map(() => 'var(--accent)'),
+      ...overdue.map(() => 'var(--danger)'),
+      ...idle.filter(t => !overdue.find(o => o.id === t.id)).map(() => 'var(--border-strong)'),
+      ...done.map(() => 'var(--ok)'),
+    ];
+    const dots = allDots.slice(0, MAX_DOTS);
+    const extra = allDots.length - dots.length;
+    const dotsHtml = dots.map(c =>
+      `<span style="width:10px;height:10px;border-radius:50%;background:${c};display:inline-block;flex-shrink:0;"></span>`
+    ).join('') + (extra > 0 ? `<span style="font-size:10px;color:var(--fg-muted);align-self:center;">+${extra}</span>` : '');
+
+    return `
+      <div style="background:var(--surface);border:1.5px solid ${statusColor};border-radius:var(--radius);padding:16px 18px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span class="avatar lg" style="background:${p.color}">${initials(p.name)}</span>
+            <div>
+              <div style="font-weight:600;font-size:14px;">${escapeHtml(p.name)}</div>
+              <div style="font-size:11px;color:var(--fg-muted);">${myTasks.length} tarea${myTasks.length!==1?'s':''}</div>
+            </div>
+          </div>
+          <span style="font-size:11px;font-weight:600;color:${statusColor};white-space:nowrap;">${statusLabel}</span>
+        </div>
+
+        <!-- Task dots -->
+        ${myTasks.length > 0 ? `
+        <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px;min-height:15px;">
+          ${dotsHtml}
+        </div>` : `<div style="font-size:12px;color:var(--fg-subtle);margin-bottom:12px;">Sin tareas asignadas</div>`}
+
+        <!-- Numbers row -->
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;text-align:center;font-size:11px;">
+          <div>
+            <div style="font-weight:700;font-size:15px;color:var(--accent);" class="mono">${running.length}</div>
+            <div style="color:var(--fg-subtle);">En curso</div>
+          </div>
+          <div>
+            <div style="font-weight:700;font-size:15px;color:var(--fg-muted);" class="mono">${idle.length}</div>
+            <div style="color:var(--fg-subtle);">Pendientes</div>
+          </div>
+          <div>
+            <div style="font-weight:700;font-size:15px;color:var(--ok);" class="mono">${done.length}</div>
+            <div style="color:var(--fg-subtle);">Hechas</div>
+          </div>
+          <div>
+            <div style="font-weight:700;font-size:15px;color:${overdue.length>0?'var(--danger)':'var(--fg-subtle)'};" class="mono">${overdue.length}</div>
+            <div style="color:var(--fg-subtle);">Vencidas</div>
+          </div>
+        </div>
+
+        ${avgMs > 0 ? `
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:12px;color:var(--fg-muted);display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;">
+          <span>Tiempo promedio real / tarea</span>
+          <strong class="mono" style="color:var(--fg);">${fmtTime(avgMs)}</strong>
+        </div>` : ''}
+        ${(() => {
+          const withEst = done.filter(t=>t.estimated_hours);
+          if (!withEst.length) return '';
+          const totalEst = withEst.reduce((a,t)=>a+t.estimated_hours,0);
+          const totalReal = withEst.reduce((a,t)=>a+elapsedFor(t)/3600000,0);
+          const ratio = totalReal/totalEst;
+          const pct = Math.round(ratio*100);
+          const label = ratio<=1.05?'En tiempo':ratio<=1.3?'Leve retraso':'Sobre tiempo';
+          const bg = ratio<=1.05?'var(--ok-soft)':ratio<=1.3?'var(--warn-soft)':'var(--danger-soft)';
+          const fg = ratio<=1.05?'var(--ok)':ratio<=1.3?'oklch(0.45 0.13 70)':'var(--danger)';
+          return `<div style="margin-top:6px;padding:4px 8px;border-radius:var(--radius-sm);background:${bg};font-size:11px;font-weight:600;color:${fg};text-align:center;">${label} · ${pct}% (${totalReal.toFixed(1)}h real / ${totalEst}h est.)</div>`;
+        })()}
+      </div>`;
+  }).join('');
+
+  host.innerHTML = legend + `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;">${cards}</div>`;
+}
+
+function renderPeople() {
+  const list = $('#peopleList');
+  if (state.people.length === 0) {
+    list.innerHTML = `<div class="empty"><div class="empty-title">Sin personas todavía</div><div>Agrega miembros del equipo para asignar tareas.</div></div>`;
+    return;
+  }
+  list.innerHTML = state.people.map(p => {
+    const taskCount = state.tasks.filter(t => t.author_id === p.id).length;
+    return `
+      <div class="row" data-id="${p.id}">
+        <div class="row-name">
+          <span class="avatar lg" style="background:${p.color}">${initials(p.name)}</span>
+          <span>${escapeHtml(p.name)}</span>
+        </div>
+        <div class="row-meta">${taskCount} tarea${taskCount===1?'':'s'}</div>
+        <div class="task-actions">
+          <button class="icon-btn" data-act="edit-person" aria-label="Editar">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2.5l2.5 2.5L5 13.5 2 14l.5-3z"/></svg>
+          </button>
+          <button class="icon-btn danger" data-act="del-person" aria-label="Eliminar">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h10M6 5V3.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V5M5 5l.7 8.1a1 1 0 0 0 1 .9h2.6a1 1 0 0 0 1-.9L11 5"/></svg>
+          </button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ============================================================
+//  Modal (edit)
+// ============================================================
+function openModal({ title, fields, onSave }) {
+  const host = $('#modalHost');
+  host.innerHTML = `
+    <div class="modal-backdrop">
+      <div class="modal" role="dialog">
+        <h3>${escapeHtml(title)}</h3>
+        <form id="modalForm">
+          ${fields.map(f => f.type === 'colors' ? `
+            <div class="field">
+              <label>${escapeHtml(f.label)}</label>
+              <div class="color-picker" data-key="${f.key}">
+                ${PROJECT_COLORS.map(c => `<button type="button" class="color-chip ${c===f.value?'selected':''}" data-color="${c}" style="background:${c}"></button>`).join('')}
+              </div>
+            </div>
+          ` : f.type === 'date' ? `
+            <div class="field">
+              <label>${escapeHtml(f.label)}</label>
+              <input type="date" name="${f.key}" value="${escapeHtml(f.value || '')}" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);" />
+            </div>
+          ` : f.type === 'number' ? `
+            <div class="field">
+              <label>${escapeHtml(f.label)}</label>
+              <input type="number" name="${f.key}" value="${escapeHtml(String(f.value ?? ''))}" min="0.5" max="999" step="0.5" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);" />
+            </div>
+          ` : `
+            <div class="field">
+              <label>${escapeHtml(f.label)}</label>
+              <input type="text" name="${f.key}" value="${escapeHtml(f.value || '')}" required />
+            </div>
+          `).join('')}
+          <div class="modal-actions">
+            <button type="button" class="btn btn-ghost" data-cancel>Cancelar</button>
+            <button type="submit" class="btn btn-primary">Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>`;
+  const close = () => host.innerHTML = '';
+  host.querySelector('[data-cancel]').onclick = close;
+  host.querySelector('.modal-backdrop').onclick = e => { if (e.target === e.currentTarget) close(); };
+  host.querySelectorAll('.color-picker').forEach(cp => {
+    cp.addEventListener('click', e => {
+      const chip = e.target.closest('.color-chip'); if (!chip) return;
+      cp.querySelectorAll('.color-chip').forEach(x => x.classList.remove('selected'));
+      chip.classList.add('selected');
+    });
+  });
+  host.querySelector('#modalForm').onsubmit = (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const result = {};
+    fields.forEach(f => {
+      if (f.type === 'colors') {
+        const sel = host.querySelector(`.color-picker[data-key="${f.key}"] .color-chip.selected`);
+        result[f.key] = sel ? sel.dataset.color : f.value;
+      } else {
+        result[f.key] = fd.get(f.key);
+      }
+    });
+    onSave(result);
+    close();
+  };
+}
+
+function confirmDialog(message, onYes) {
+  deleteWithReasonDialog(message, null, onYes);
+}
+
+function deleteWithReasonDialog(taskText, taskToDelete, onYes) {
+  const host = $('#modalHost');
+  const peopleOptions = state.people.map(p =>
+    `<option value="${p.id}">${escapeHtml(p.name)}</option>`
+  ).join('');
+
+  host.innerHTML = `
+    <div class="modal-backdrop">
+      <div class="modal" role="dialog" style="max-width:420px;">
+        <h3 style="color:var(--danger);">Eliminar tarea</h3>
+        <p style="margin:8px 0 16px;color:var(--fg-muted);font-size:13px;line-height:1.5;">
+          "${escapeHtml(taskText)}"
+        </p>
+
+        <div class="field">
+          <label>¿Quién está eliminando esta tarea? <span style="color:var(--danger);">*</span></label>
+          <select id="delPerson" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);appearance:none;-webkit-appearance:none;">
+            <option value="">— Selecciona una persona —</option>
+            ${peopleOptions}
+          </select>
+        </div>
+
+        <div class="field" style="margin-top:14px;">
+          <label>Motivo de eliminación <span style="color:var(--danger);">*</span></label>
+          <textarea id="delReason" placeholder="Explica por qué se elimina esta tarea…"
+            style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);resize:vertical;min-height:80px;font-family:inherit;font-size:13px;line-height:1.5;"></textarea>
+          <div id="delReasonError" style="color:var(--danger);font-size:11px;margin-top:4px;display:none;">Debes ingresar un motivo para continuar.</div>
+        </div>
+
+        <div class="modal-actions" style="margin-top:20px;">
+          <button class="btn btn-ghost" data-cancel>Cancelar</button>
+          <button class="btn btn-danger" data-yes>Eliminar tarea</button>
+        </div>
+      </div>
+    </div>`;
+
+  const close = () => host.innerHTML = '';
+  host.querySelector('[data-cancel]').onclick = close;
+  host.querySelector('.modal-backdrop').onclick = e => { if (e.target === e.currentTarget) close(); };
+
+  host.querySelector('[data-yes]').onclick = () => {
+    const person = host.querySelector('#delPerson').value;
+    const reason = host.querySelector('#delReason').value.trim();
+    const errorEl = host.querySelector('#delReasonError');
+
+    if (!person) {
+      host.querySelector('#delPerson').style.borderColor = 'var(--danger)';
+      return;
+    }
+    if (!reason) {
+      errorEl.style.display = 'block';
+      host.querySelector('#delReason').style.borderColor = 'var(--danger)';
+      return;
+    }
+
+    const personName = state.people.find(p => p.id === person)?.name || '?';
+    const proj = findProject(taskToDelete?.project_id);
+    const author = findPerson(taskToDelete?.author_id);
+
+    // Insertar en deletion_log si Supabase está disponible
+    if (sb && taskToDelete) {
+      const logRow = {
+        task_id:          taskToDelete.id,
+        task_text:        taskToDelete.text,
+        task_priority:    taskToDelete.priority || null,
+        task_due_date:    taskToDelete.due_date || null,
+        task_est_hours:   taskToDelete.estimated_hours || null,
+        task_started_at:  taskToDelete.started_at || null,
+        task_project_id:  taskToDelete.project_id || null,
+        task_project_name: proj?.name || null,
+        task_author_id:   taskToDelete.author_id || null,
+        task_author_name: author?.name || null,
+        deleted_by_id:    person,
+        deleted_by_name:  personName,
+        reason:           reason,
+      };
+      sb.from('deletion_log').insert(logRow).then(({ error }) => {
+        if (error) console.warn('deletion_log insert failed:', error.message);
+      });
+    }
+
+    console.log(`[SmartWork] Tarea eliminada por ${personName}: "${taskText}" — Motivo: ${reason}`);
+    onYes();
+    close();
+    toast(`Eliminado por ${personName}`);
+  };
+
+  // Reset border on input
+  host.querySelector('#delPerson').oninput = e => e.target.style.borderColor = '';
+  host.querySelector('#delReason').oninput = e => {
+    e.target.style.borderColor = '';
+    host.querySelector('#delReasonError').style.display = 'none';
+  };
+}
+
+// ============================================================
+//  Event handlers
+// ============================================================
+
+// Navigation
+function setPage(page) {
+  state.page = page;
+  $$('.pages > section').forEach(s => s.classList.toggle('active', s.id === `page-${page}`));
+  $$('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === page));
+  window.scrollTo({ top: 0 });
+}
+$$('.nav-item').forEach(n => n.addEventListener('click', () => setPage(n.dataset.page)));
+
+// New task
+$('#newTaskForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const text = $('#ntText').value.trim();
+  const project_id = $('#ntProject').value || null;
+  const author_id = $('#ntAuthor').value || null;
+  const priority = $('#ntPriority').value;
+  const due_date = $('#ntDueDate').value || null;
+  const estimated_hours = parseFloat($('#ntEstHours').value) || null;
+  if (!text) return;
+  if (!project_id) { toast('Elige un proyecto', 'error'); return; }
+  if (!author_id) { toast('Elige un autor', 'error'); return; }
+  const now = new Date().toISOString();
+  const row = {
+    id: uuid(), text, project_id, author_id, priority,
+    due_date, estimated_hours,
+    done: false,
+    started_at: null,
+    completed_at: null,
+    created_at: now
+  };
+  await dbInsert('tasks', row);
+  renderAll();
+  e.target.reset();
+  $('#ntPriority').value = 'media';
+  $('#ntEstHours').value = '';
+});
+
+// Filters
+['fProject','fAuthor','fPriority'].forEach(id => {
+  $('#'+id).addEventListener('change', () => {
+    state.filters = {
+      project: $('#fProject').value,
+      author: $('#fAuthor').value,
+      priority: $('#fPriority').value,
+    };
+    renderTasks(); renderStats(); renderNavBadges();
+  });
+});
+// Stat card filters
+$$('[data-stat-filter]').forEach(card => {
+  card.addEventListener('click', () => {
+    const v = card.dataset.statFilter;
+    state.filters.status = state.filters.status === v ? '' : v;
+    $$('[data-stat-filter]').forEach(c => c.classList.toggle('active', c.dataset.statFilter === state.filters.status));
+    renderTasks();
+  });
+});
+
+$('#clearFilters').onclick = () => {
+  state.filters = { project:'', author:'', priority:'', status:'' };
+  $$('[data-stat-filter]').forEach(c => c.classList.remove('active'));
+  renderFilters(); renderTasks(); renderStats(); renderNavBadges();
+};
+
+// Task interactions (event delegation)
+$('#taskListHost').addEventListener('click', async e => {
+  const taskEl = e.target.closest('.task');
+  if (!taskEl) return;
+  const id = taskEl.dataset.id;
+  const task = state.tasks.find(t => t.id === id);
+  if (!task) return;
+  const actEl = e.target.closest('[data-act]');
+  if (!actEl) return;
+  const act = actEl.dataset.act;
+
+  if (act === 'toggle') {
+    if (task.done) {
+      // Reabrir — no borra sesiones, conserva tiempo acumulado
+      const patch = { done: false, completed_at: null };
+      Object.assign(task, patch);
+      await dbUpdate('tasks', id, patch);
+      renderAll();
+    }
+    // toggle desde done → handled above; from running/paused → use complete-confirm
+  } else if (act === 'complete-confirm') {
+    // Modal de confirmación antes de completar
+    const totalH = realHoursFor(task);
+    const host2 = $('#modalHost');
+    host2.innerHTML = `
+      <div class="modal-backdrop">
+        <div class="modal" role="dialog" style="max-width:400px;">
+          <h3>¿Completar esta tarea?</h3>
+          <p style="font-size:13px;color:var(--fg-muted);margin:8px 0 16px;line-height:1.5;">
+            <strong>${escapeHtml(task.text)}</strong><br>
+            ${totalH > 0 ? `Tiempo registrado: <strong class="mono">${fmtTime(elapsedFor(task))}</strong> (${totalH}h)` : 'No hay tiempo registrado aún.'}
+            ${task.estimated_hours ? `<br>Estimado: <strong>${task.estimated_hours}h</strong>` : ''}
+          </p>
+          <div class="modal-actions">
+            <button class="btn btn-ghost" data-cancel>Cancelar</button>
+            <button class="btn btn-primary" data-yes style="background:var(--ok);">Sí, completar</button>
+          </div>
+        </div>
+      </div>`;
+    const closeM = () => host2.innerHTML = '';
+    host2.querySelector('[data-cancel]').onclick = closeM;
+    host2.querySelector('.modal-backdrop').onclick = e => { if (e.target === e.currentTarget) closeM(); };
+    host2.querySelector('[data-yes]').onclick = async () => {
+      closeM();
+      const active = activeSession(id);
+      if (active) {
+        const now = new Date().toISOString();
+        active.ended_at = now;
+        if (sb) await sb.from('time_sessions').update({ ended_at: now }).eq('id', active.id);
+      }
+      const patch = { done: true, completed_at: new Date().toISOString() };
+      Object.assign(task, patch);
+      await dbUpdate('tasks', id, patch);
+      localStore.save();
+      renderAll();
+      toast('✓ Tarea completada — ' + fmtTime(elapsedFor(task)));
+    };
+
+  } else if (act === 'start') {
+    // Primera vez que inicia — crea sesión y marca started_at
+    if (task.done) return;
+    const now = new Date().toISOString();
+    if (!task.started_at) {
+      const patch = { started_at: now };
+      Object.assign(task, patch);
+      await dbUpdate('tasks', id, patch);
+    }
+    const session = { id: uuid(), task_id: id, started_at: now, ended_at: null };
+    state.time_sessions.push(session);
+    if (sb) await sb.from('time_sessions').insert(session);
+    localStore.save();
+    renderAll();
+    toast('Cronómetro iniciado');
+
+  } else if (act === 'pause') {
+    // Pausa — cierra la sesión activa
+    const active = activeSession(id);
+    if (!active) return;
+    const now = new Date().toISOString();
+    active.ended_at = now;
+    if (sb) await sb.from('time_sessions').update({ ended_at: now }).eq('id', active.id);
+    localStore.save();
+    renderAll();
+    toast('Pausado — ' + fmtTime(elapsedFor(task)) + ' acumulados');
+
+  } else if (act === 'resume') {
+    // Reanudar — crea nueva sesión
+    if (task.done) return;
+    const now = new Date().toISOString();
+    const session = { id: uuid(), task_id: id, started_at: now, ended_at: null };
+    state.time_sessions.push(session);
+    if (sb) await sb.from('time_sessions').insert(session);
+    localStore.save();
+    renderAll();
+    toast('Reanudado');
+
+  } else if (act === 'log-time') {
+    openLogTimeModal(task);
+  } else if (act === 'del-entry') {
+    const entryId = e.target.closest('[data-entry-id]')?.dataset.entryId;
+    if (!entryId) return;
+    state.time_entries = state.time_entries.filter(en => en.id !== entryId);
+    if (sb) sb.from('time_entries').delete().eq('id', entryId).then(({error}) => {
+      if (error) toast('Error eliminando entrada: ' + error.message, 'error');
+    });
+    localStore.save();
+    renderAll();
+  } else if (act === 'edit-task') {
+    const fields = [
+      { key: 'text', label: 'Descripción', value: task.text },
+    ];
+    // Si no está completada, permitir editar horas estimadas y fecha
+    if (!task.done) {
+      fields.push({ key: 'estimated_hours', label: 'Horas estimadas', type: 'number', value: task.estimated_hours || '' });
+      if (!task.started_at) {
+        fields.push({ key: 'due_date', label: 'Fecha de entrega', type: 'date', value: task.due_date || '' });
+      }
+    }
+    openModal({
+      title: 'Editar tarea',
+      fields,
+      onSave: async (data) => {
+        const patch = { text: data.text.trim() || task.text };
+        if (!task.done) {
+          patch.estimated_hours = parseFloat(data.estimated_hours) || null;
+          if (!task.started_at) patch.due_date = data.due_date || null;
+        }
+        Object.assign(task, patch);
+        await dbUpdate('tasks', id, patch);
+        renderAll();
+      }
+    });
+  } else if (act === 'delete') {
+    deleteWithReasonDialog(task.text, task, async () => {
+      state.tasks = state.tasks.filter(t => t.id !== id);
+      await dbDelete('tasks', id);
+      renderAll();
+    });
+  }
+});
+
+// Live ticker — actualiza cronómetros cada segundo sin re-renderizar todo
+setInterval(() => {
+  const running = state.tasks.filter(t => activeSession(t.id));
+  if (!running.length) return;
+
+  running.forEach(t => {
+    // Actualizar el reloj en vivo en la card
+    const el = document.getElementById(`live-${t.id}`);
+    if (el) el.textContent = fmtTime(elapsedFor(t));
+  });
+
+  // Actualizar stat de tiempo total
+  const all = filteredTasks();
+  const doneEl = $('#statTime');
+  if (doneEl) doneEl.textContent = fmtTime(
+    all.filter(t => t.done).reduce((a, t) => a + elapsedFor(t), 0)
+  );
+}, 1000);
+
+
+// New project
+$('#newProjectForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const name = $('#npName').value.trim();
+  const color = $('#npColors').dataset.selected || PROJECT_COLORS[0];
+  if (!name) return;
+  const row = { id: uuid(), name, color, created_at: new Date().toISOString() };
+  await dbInsert('projects', row);
+  renderAll();
+  e.target.reset();
+});
+
+// New person
+$('#newPersonForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const name = $('#ppName').value.trim();
+  if (!name) return;
+  const color = AVATAR_COLORS[state.people.length % AVATAR_COLORS.length];
+  const row = { id: uuid(), name, color, created_at: new Date().toISOString() };
+  await dbInsert('people', row);
+  renderAll();
+  e.target.reset();
+});
+
+// Project list interactions
+$('#projectList').addEventListener('click', e => {
+  const row = e.target.closest('.row'); if (!row) return;
+  const id = row.dataset.id;
+  const proj = state.projects.find(p => p.id === id); if (!proj) return;
+  const act = e.target.closest('[data-act]')?.dataset.act;
+  if (act === 'edit-project') {
+    openModal({
+      title: 'Editar proyecto',
+      fields: [
+        { key:'name', label:'Nombre', value: proj.name },
+        { key:'color', label:'Color', type:'colors', value: proj.color }
+      ],
+      onSave: async (data) => {
+        Object.assign(proj, data);
+        await dbUpdate('projects', id, data);
+        renderAll();
+      }
+    });
+  } else if (act === 'del-project') {
+    confirmDialog(`¿Eliminar el proyecto "${proj.name}"? Las tareas asociadas perderán su proyecto.`, async () => {
+      state.projects = state.projects.filter(p => p.id !== id);
+      await dbDelete('projects', id);
+      renderAll();
+    });
+  }
+});
+
+// People list interactions
+$('#peopleList').addEventListener('click', e => {
+  const row = e.target.closest('.row'); if (!row) return;
+  const id = row.dataset.id;
+  const person = state.people.find(p => p.id === id); if (!person) return;
+  const act = e.target.closest('[data-act]')?.dataset.act;
+  if (act === 'edit-person') {
+    openModal({
+      title: 'Editar persona',
+      fields: [
+        { key:'name', label:'Nombre', value: person.name },
+        { key:'color', label:'Color del avatar', type:'colors', value: person.color }
+      ],
+      onSave: async (data) => {
+        Object.assign(person, data);
+        await dbUpdate('people', id, data);
+        renderAll();
+      }
+    });
+  } else if (act === 'del-person') {
+    confirmDialog(`¿Eliminar a "${person.name}"?`, async () => {
+      state.people = state.people.filter(p => p.id !== id);
+      await dbDelete('people', id);
+      renderAll();
+    });
+  }
+});
+
+// Settings toggles
+$$('.toggle').forEach(t => {
+  const key = t.dataset.key;
+  if (state.settings[key]) t.classList.add('on'); else t.classList.remove('on');
+  t.addEventListener('click', () => {
+    state.settings[key] = !state.settings[key];
+    t.classList.toggle('on', state.settings[key]);
+    saveSettings();
+    renderAll();
+  });
+});
+$('#reloadBtn').onclick = () => { loadAll(); toast('Datos recargados'); };
+
+// ============================================================
+//  Excel export
+// ============================================================
+$('#exportExcelBtn').onclick = () => {
+$('#exportExcelBtn2').onclick = () => $('#exportExcelBtn').click();
+
+  if (!window.XLSX) { toast('SheetJS no cargó, intenta recargar', 'error'); return; }
+  const fmtDt = iso => iso ? new Date(iso).toLocaleString('es', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
+  const fmtDateOnly = iso => iso ? new Date(iso + 'T00:00:00').toLocaleDateString('es', { day:'2-digit', month:'2-digit', year:'numeric' }) : '';
+  const today = new Date().toISOString().slice(0,10);
+
+  const rows = state.tasks.map(t => {
+    const person  = findPerson(t.author_id);
+    const project = findProject(t.project_id);
+    const ms = elapsedFor(t);
+    const totalH = ms ? +(ms / 3600000).toFixed(2) : '';
+    return {
+      'Persona'          : person?.name || '',
+      'Proyecto'         : project?.name || '',
+      'Tarea'            : t.text,
+      'Prioridad'        : t.priority,
+      'Estado'           : t.done ? 'Completada' : (t.started_at ? 'En curso' : 'Sin iniciar'),
+      'Horas estimadas'  : t.estimated_hours || '',
+      'Fecha entrega'    : fmtDateOnly(t.due_date),
+      'Inicio real'      : fmtDt(t.started_at),
+      'Fin real'         : fmtDt(t.completed_at),
+      'Tiempo real (h)'  : totalH,
+      'Creada'           : fmtDt(t.created_at),
+    };
+  });
+
+  const wb = XLSX.utils.book_new();
+
+  // ── Hoja Tareas con título ──
+  const titleRows = [
+    ['SmartWork · Reporte de tareas'],
+    [`Generado el: ${new Date().toLocaleString('es', { day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit' })}`],
+    [`Total tareas: ${state.tasks.length}  |  Completadas: ${state.tasks.filter(t=>t.done).length}  |  Pendientes: ${state.tasks.filter(t=>!t.done).length}`],
+    [],  // fila vacía separadora
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(titleRows);
+  // Agregar datos desde la fila 5
+  XLSX.utils.sheet_add_json(ws, rows, { origin: 'A5' });
+  ws['!cols'] = [18,20,40,10,12,14,14,18,18,16,18].map(w => ({ wch: w }));
+  // Merge título en A1
+  ws['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:10} }];
+  XLSX.utils.book_append_sheet(wb, ws, 'Tareas');
+
+  if (people.length) {
+    const summary = people.map(p => {
+      const mine = state.tasks.filter(t => t.author_id === p.id);
+      const done = mine.filter(t => t.done);
+      const totalMs = done.reduce((a, t) => a + elapsedFor(t), 0);
+      return {
+        'Persona'            : p.name,
+        'Tareas totales'     : mine.length,
+        'Completadas'        : done.length,
+        'En curso'           : mine.filter(t => !t.done && t.started_at).length,
+        'Sin iniciar'        : mine.filter(t => !t.done && !t.started_at).length,
+        'Vencidas'           : mine.filter(t => !t.done && t.due_date && new Date(t.due_date+'T23:59:59') < new Date()).length,
+        'Tiempo total (h)'   : totalMs ? +(totalMs/3600000).toFixed(2) : 0,
+        'Promedio/tarea (h)' : done.length ? +((totalMs/done.length)/3600000).toFixed(2) : '',
+      };
+    });
+    const titleRows2 = [['SmartWork · Resumen del equipo'], [`Generado el: ${new Date().toLocaleString('es',{day:'2-digit',month:'long',year:'numeric'})}`], []];
+    const ws2 = XLSX.utils.aoa_to_sheet(titleRows2);
+    XLSX.utils.sheet_add_json(ws2, summary, { origin: 'A4' });
+    ws2['!cols'] = [20,14,12,10,12,10,16,18].map(w => ({ wch: w }));
+    ws2['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:7} }];
+    XLSX.utils.book_append_sheet(wb, ws2, 'Resumen equipo');
+  }
+
+  // Time entries sheet
+  if (state.time_entries.length > 0) {
+    const teRows = state.time_entries
+      .sort((a, b) => a.work_date < b.work_date ? -1 : 1)
+      .map(e => {
+        const task    = state.tasks.find(t => t.id === e.task_id);
+        const person  = findPerson(e.person_id);
+        const project = task ? findProject(task.project_id) : null;
+        return {
+          'Fecha trabajo'  : fmtDateOnly(e.work_date),
+          'Persona'        : person?.name || '',
+          'Proyecto'       : project?.name || '',
+          'Tarea'          : task?.text || '(eliminada)',
+          'Horas reales'   : e.hours,
+          'Nota'           : e.note || '',
+          'Registrado el'  : fmtDt(e.created_at),
+        };
+      });
+    const ws3 = XLSX.utils.json_to_sheet(teRows);
+    ws3['!cols'] = [14,18,20,40,12,30,18].map(w => ({ wch: w }));
+    XLSX.utils.book_append_sheet(wb, ws3, 'Registro de horas');
+  }
+
+  XLSX.writeFile(wb, `SmartWork_${today}.xlsx`);
+  toast('Excel descargado');
+};
+
+// ============================================================
+//  Week view
+// ============================================================
+const weekState = { offset: 0 }; // weeks relative to current
+
+// Distribuye las horas estimadas de una tarea entre días hábiles
+// de la semana visible que estén dentro del rango [inicio, due_date].
+// Inicio = fecha de creación de la tarea o lunes de la semana visible,
+// lo que sea más reciente. Así tareas pasadas también se muestran.
+function hoursOnDay(task, dateStr, weekDays) {
+  if (!task.estimated_hours || task.done) return 0;
+  if (!task.due_date) return 0;
+
+  const dueD   = new Date(task.due_date + 'T00:00:00');
+  const checkD = new Date(dateStr + 'T00:00:00');
+
+  // El día no puede ser posterior al vencimiento
+  if (checkD > dueD) return 0;
+
+  // El día debe ser hábil
+  const dow = checkD.getDay();
+  if (dow === 0 || dow === 6) return 0;
+
+  // Inicio del rango: el primer día hábil de la semana visible
+  // que no sea anterior a la fecha de creación
+  const createdStr = task.created_at ? task.created_at.slice(0, 10) : '2000-01-01';
+  const weekStart  = new Date(weekDays[0].getFullYear(), weekDays[0].getMonth(), weekDays[0].getDate());
+  const createdD   = new Date(createdStr + 'T00:00:00');
+  const startD     = createdD > weekStart ? createdD : weekStart;
+
+  if (checkD < startD) return 0;
+
+  // Contar días hábiles entre startD y dueD inclusive
+  let workDays = 0;
+  const cur = new Date(startD < weekStart ? weekStart : startD);
+  // Para distribución usamos todo el rango real (no solo la semana)
+  const rangeStart = new Date(createdStr + 'T00:00:00');
+  const counter = new Date(rangeStart);
+  while (counter <= dueD) {
+    const d = counter.getDay();
+    if (d !== 0 && d !== 6) workDays++;
+    counter.setDate(counter.getDate() + 1);
+  }
+  if (workDays === 0) return 0;
+
+  return Math.round((task.estimated_hours / workDays) * 100) / 100;
+}
+
+function getWeekBounds(offset) {
+  const now = new Date();
+  const day = now.getDay(); // 0 sun
+  const mondayDiff = day === 0 ? -6 : 1 - day;
+  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + mondayDiff + offset * 7);
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    return d;
+  });
+  return days;
+}
+
+function isoDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function renderWeek() {
+  const gridHost = $('#weekGrid');
+  const backlogHost = $('#weekBacklogPanel');
+  if (!gridHost) return;
+
+  const days = getWeekBounds(weekState.offset);
+  const todayStr = isoDate(new Date());
+  const DAY_NAMES = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+
+  // Week range label
+  const rangeLabel = $('#weekRangeLabel');
+  if (rangeLabel) {
+    const fmt = d => d.toLocaleDateString('es', { day:'2-digit', month:'short' });
+    rangeLabel.textContent = `${fmt(days[0])} – ${fmt(days[6])}`;
+  }
+
+  if (state.people.length === 0) {
+    gridHost.innerHTML = `<div class="empty"><div class="empty-title">Sin personas</div><div>Agrega miembros del equipo en la sección Personas.</div></div>`;
+    if (backlogHost) backlogHost.innerHTML = '';
+    return;
+  }
+
+  const gridCols = `140px repeat(7, 1fr)`;
+
+  // ── HEADER: days with team-level capacity bar ──────────────────
+  const headerCells = days.map((d, i) => {
+    const ds = isoDate(d);
+    const isToday = ds === todayStr;
+    // Total estimated hours across whole team for this day (distributed)
+    const teamEst = state.tasks
+      .filter(t => !t.done && t.due_date)
+      .reduce((a, t) => a + hoursOnDay(t, ds, days), 0);
+    const teamCap = state.people.length * CAP_HOURS_DAY;
+    const pct = teamCap ? Math.min(100, Math.round(teamEst / teamCap * 100)) : 0;
+    const capColor = pct >= 90 ? 'var(--danger)' : pct >= 65 ? 'var(--warn)' : teamEst > 0 ? 'var(--ok)' : 'var(--border-strong)';
+    const capLabel = teamEst > 0 ? `${+teamEst.toFixed(1)}h / ${teamCap}h` : '';
+    return `
+      <div class="wp-header-cell${isToday?' today-col':''}">
+        ${DAY_NAMES[i]}<span class="wp-header-day-num">${d.getDate()}</span>
+        ${teamEst > 0 ? `
+          <div class="wp-cap-bar"><div class="wp-cap-fill" style="width:${pct}%;background:${capColor};"></div></div>
+          <div class="wp-cap-label" style="color:${capColor};">${capLabel}</div>
+        ` : '<div style="height:14px;"></div>'}
+      </div>`;
+  }).join('');
+
+  // ── PERSON ROWS ────────────────────────────────────────────────
+  const personRows = state.people.map(p => {
+    // Week total for free/busy label
+    const weekEst = days.reduce((acc, d) => {
+      const ds = isoDate(d);
+      return acc + state.tasks
+        .filter(t => t.author_id === p.id && !t.done)
+        .reduce((a, t) => a + hoursOnDay(t, ds, days), 0);
+    }, 0);
+    const weekCap = CAP_HOURS_DAY * 5;
+    const weekPct = Math.round(weekEst / weekCap * 100);
+    const freeColor = weekPct >= 90 ? 'var(--danger)' : weekPct >= 65 ? 'oklch(0.45 0.13 70)' : weekEst > 0 ? 'var(--ok)' : 'var(--fg-subtle)';
+    const freeBg    = weekPct >= 90 ? 'var(--danger-soft)' : weekPct >= 65 ? 'var(--warn-soft)' : weekEst > 0 ? 'var(--ok-soft)' : 'var(--surface-2)';
+    const totalPersonTasks   = state.tasks.filter(t => t.author_id === p.id).length;
+    const pendingPersonTasks = state.tasks.filter(t => t.author_id === p.id && !t.done).length;
+    const freeLabel = weekPct >= 90
+      ? `${Math.round(weekEst*10)/10}h / 40h — sobrecargada`
+      : weekPct >= 65
+        ? `${Math.round(weekEst*10)/10}h / 40h — ocupada`
+        : weekEst > 0
+          ? `${Math.round(weekEst*10)/10}h / 40h esta semana`
+          : totalPersonTasks > 0
+            ? `${pendingPersonTasks} pendiente${pendingPersonTasks !== 1 ? 's' : ''} sin fecha`
+            : 'Sin tareas asignadas';
+
+    const dayCells = days.map(d => {
+      const ds = isoDate(d);
+      const isToday = ds === todayStr;
+
+      // Tareas que aparecen en este día:
+      // - Tarea de 1 día: solo en su due_date
+      // - Tarea multi-día (estimated_hours + rango > 1 día hábil): en cada día de su rango
+      const visibleTasks = state.tasks.filter(t => {
+        if (t.author_id !== p.id) return false;
+        if (!t.due_date) return false;
+
+        const hod = hoursOnDay(t, ds, days);
+        if (hod > 0) return true;           // tiene carga en este día
+
+        // Si no tiene estimated_hours, solo aparece en su due_date
+        if (!t.estimated_hours && t.due_date === ds) return true;
+
+        return false;
+      });
+
+      // Horas distribuidas para la barra de carga
+      const dayEst = state.tasks
+        .filter(t => t.author_id === p.id && !t.done && t.due_date)
+        .reduce((a, t) => a + hoursOnDay(t, ds, days), 0);
+      const pct = Math.round(dayEst / CAP_HOURS_DAY * 100);
+      const loadCls = pct >= 100 ? 'overloaded' : pct >= 75 ? 'busy' : isToday ? 'today-col' : '';
+
+      const chips = visibleTasks.map(t => {
+        const st = taskState(t);
+        const isOverdue = !t.done && new Date(t.due_date + 'T23:59:59') < new Date();
+        const cls = isOverdue ? 'chip-overdue' : st === 'running' ? 'chip-running' : st === 'done' ? 'chip-done' : 'chip-idle';
+        const proj = findProject(t.project_id);
+        const hod = hoursOnDay(t, ds, days);
+        const isDueToday = t.due_date === ds;
+        // Mostrar horas del día si es multi-día, o las totales si es el día de entrega único
+        // Si es multi-día: mostrar "Xh hoy" vs total; si es 1 día: mostrar total
+        const totalWorkDays = (() => {
+          if (!t.estimated_hours || !t.due_date) return 1;
+          const createdStr = t.created_at ? t.created_at.slice(0,10) : t.due_date;
+          const start = new Date(createdStr + 'T00:00:00');
+          const due = new Date(t.due_date + 'T00:00:00');
+          let wd = 0;
+          const c = new Date(start);
+          while (c <= due) { if (c.getDay()!==0 && c.getDay()!==6) wd++; c.setDate(c.getDate()+1); }
+          return wd || 1;
+        })();
+        const isMultiDay = totalWorkDays > 1;
+        const hoursLabel = hod > 0 && t.estimated_hours
+          ? isMultiDay ? `${Math.round(hod*10)/10}h hoy · ${t.estimated_hours}h total` : `${t.estimated_hours}h`
+          : t.estimated_hours ? `${t.estimated_hours}h` : '';
+        // Indicador de que vence hoy
+        const dueMarker = isDueToday && t.estimated_hours && hod < t.estimated_hours
+          ? ` <span style="font-size:9px;opacity:.6;">📅</span>` : '';
+
+        return `
+          <div class="wp-chip ${cls}" data-task-id="${t.id}" data-person-id="${p.id}" data-date="${ds}">
+            <span class="wp-chip-title">${escapeHtml(t.text)}${dueMarker}</span>
+            <div class="wp-chip-meta">
+              ${proj ? `<span>${escapeHtml(proj.name)}</span>` : ''}
+              ${hoursLabel ? `<span style="font-weight:600;">${hoursLabel}</span>` : ''}
+            </div>
+          </div>`;
+      }).join('');
+
+      return `
+        <div class="wp-day-cell ${loadCls}" data-person-id="${p.id}" data-date="${ds}">
+          ${chips}
+          <div class="wp-add-hint">
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>
+            Agregar
+          </div>
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="wp-person-row" style="grid-template-columns:${gridCols};">
+        <div class="wp-person-label-cell">
+          <span class="avatar" style="background:${p.color};flex-shrink:0;">${initials(p.name)}</span>
+          <div>
+            <div class="wp-person-name">${escapeHtml(p.name)}</div>
+            <span class="wp-person-free" style="background:${freeBg};color:${freeColor};">${freeLabel}</span>
+          </div>
+        </div>
+        ${dayCells}
+      </div>`;
+  }).join('');
+
+  gridHost.innerHTML = `
+    <div class="wp-grid">
+      <div class="wp-header-row" style="grid-template-columns:${gridCols};">
+        <div class="wp-header-cell" style="text-align:left;">Persona · semana</div>
+        ${headerCells}
+      </div>
+      ${personRows}
+    </div>`;
+
+  // ── BACKLOG PANEL (tareas sin fecha) ───────────────────────────
+  if (backlogHost) {
+    const totalBacklog = state.tasks.filter(t => !t.due_date && !t.done).length;
+    let html = `<div class="wp-backlog-title">Backlog sin fecha <span style="font-size:11px;font-weight:400;color:var(--fg-subtle);">${totalBacklog}</span></div>`;
+
+    state.people.forEach(p => {
+      const mine = state.tasks.filter(t => t.author_id === p.id && !t.due_date && !t.done);
+      if (!mine.length) return;
+      const chips = mine.map(t => `
+        <div class="wp-backlog-chip" data-backlog-task="${t.id}">
+          <span class="wp-backlog-chip-text">${escapeHtml(t.text)}</span>
+          ${t.estimated_hours ? `<span class="wp-backlog-chip-est">${t.estimated_hours}h</span>` : ''}
+        </div>`).join('');
+      html += `
+        <div class="wp-backlog-person">
+          <div class="wp-backlog-person-label">
+            <span class="avatar" style="background:${p.color};width:16px;height:16px;font-size:8px;">${initials(p.name)}</span>
+            ${escapeHtml(p.name)}
+          </div>
+          ${chips}
+        </div>`;
+    });
+
+    if (totalBacklog === 0) html += `<div class="wp-backlog-empty">✓ Todas las tareas tienen fecha asignada</div>`;
+    backlogHost.innerHTML = html;
+
+    // Backlog chip click → modal para asignar fecha
+    backlogHost.querySelectorAll('[data-backlog-task]').forEach(el => {
+      el.addEventListener('click', () => {
+        const taskId = el.dataset.backlogTask;
+        const task = state.tasks.find(t => t.id === taskId);
+        if (!task) return;
+        openWeekAssignModal(task, null, null);
+      });
+    });
+  }
+
+  // ── EVENT DELEGATION: cell click → assign, chip click → edit ──
+  gridHost.addEventListener('click', e => {
+    // Click on existing chip
+    const chip = e.target.closest('.wp-chip');
+    if (chip) {
+      e.stopPropagation();
+      const task = state.tasks.find(t => t.id === chip.dataset.taskId);
+      if (!task || task.done) return; // completada — no se mueve
+      openWeekAssignModal(task, task.author_id, task.due_date);
+      return;
+    }
+    // Click on empty cell
+    const cell = e.target.closest('.wp-day-cell');
+    if (cell) {
+      const personId = cell.dataset.personId;
+      const date = cell.dataset.date;
+      openWeekAssignModal(null, personId, date);
+    }
+  });
+}
+
+// ── Modal de asignación / reasignación desde semana ───────────
+function openWeekAssignModal(task, defaultPersonId, defaultDate) {
+  const host = $('#modalHost');
+  const isNew = !task;
+  const title = isNew ? 'Asignar tarea a este día' : 'Mover o reasignar tarea';
+
+  const projectOpts = state.projects.map(p =>
+    `<option value="${p.id}" ${task?.project_id===p.id?'selected':''}>${escapeHtml(p.name)}</option>`).join('');
+  const peopleOpts = state.people.map(p =>
+    `<option value="${p.id}" ${(defaultPersonId===p.id)?'selected':''}>${escapeHtml(p.name)}</option>`).join('');
+
+  host.innerHTML = `
+    <div class="modal-backdrop">
+      <div class="modal" role="dialog" style="max-width:440px;">
+        <h3>${title}</h3>
+        ${task ? `<p style="margin:6px 0 14px;font-size:13px;color:var(--fg-muted);font-weight:500;">"${escapeHtml(task.text)}"</p>` : ''}
+
+        ${isNew ? `
+        <div class="field">
+          <label>Descripción <span style="color:var(--danger)">*</span></label>
+          <input type="text" id="waText" value="" placeholder="¿Qué hay que hacer?" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);" />
+        </div>
+        <div class="field" style="margin-top:12px;">
+          <label>Proyecto</label>
+          <select id="waProject" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);appearance:none;">
+            <option value="">Sin proyecto</option>${projectOpts}
+          </select>
+        </div>
+        <div class="field" style="margin-top:12px;">
+          <label>Prioridad</label>
+          <select id="waPriority" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);appearance:none;">
+            <option value="media">Media</option><option value="alta">Alta</option><option value="baja">Baja</option>
+          </select>
+        </div>` : ''}
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
+          <div class="field">
+            <label>Asignar a <span style="color:var(--danger)">*</span></label>
+            <select id="waPerson" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);appearance:none;">
+              ${peopleOpts}
+            </select>
+          </div>
+          <div class="field">
+            <label>Fecha de entrega <span style="color:var(--danger)">*</span></label>
+            <input type="date" id="waDate" value="${defaultDate||''}" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);" />
+          </div>
+        </div>
+        <div class="field" style="margin-top:12px;">
+          <label>Horas estimadas</label>
+          <input type="number" id="waHours" value="${task?.estimated_hours||''}" min="0.5" max="40" step="0.5" placeholder="ej. 2" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);" />
+        </div>
+
+        <div class="modal-actions" style="margin-top:20px;">
+          <button class="btn btn-ghost" data-cancel>Cancelar</button>
+          <button class="btn btn-primary" data-save>${isNew ? 'Crear tarea' : 'Guardar cambios'}</button>
+        </div>
+      </div>
+    </div>`;
+
+  const close = () => host.innerHTML = '';
+  host.querySelector('[data-cancel]').onclick = close;
+  host.querySelector('.modal-backdrop').onclick = e => { if (e.target === e.currentTarget) close(); };
+
+  host.querySelector('[data-save]').onclick = async () => {
+    const personId = host.querySelector('#waPerson').value;
+    const date = host.querySelector('#waDate').value;
+    const hours = parseFloat(host.querySelector('#waHours').value) || null;
+    if (!personId || !date) { toast('Selecciona persona y fecha', 'error'); return; }
+
+    if (isNew) {
+      const text = host.querySelector('#waText').value.trim();
+      if (!text) { toast('Escribe una descripción', 'error'); return; }
+      const projectId = host.querySelector('#waProject').value || null;
+      const priority = host.querySelector('#waPriority').value;
+      const row = {
+        id: uuid(), text, project_id: projectId, author_id: personId,
+        priority, due_date: date, estimated_hours: hours,
+        done: false, started_at: null, completed_at: null,
+        created_at: new Date().toISOString()
+      };
+      await dbInsert('tasks', row);
+      toast('Tarea creada y asignada');
+    } else {
+      const patch = { author_id: personId, due_date: date, estimated_hours: hours };
+      Object.assign(task, patch);
+      await dbUpdate('tasks', task.id, patch);
+      toast('Tarea actualizada');
+    }
+    close();
+    renderAll();
+  };
+}
+
+// Week nav handlers
+$('#weekPrev').onclick  = () => { weekState.offset--; renderWeek(); };
+$('#weekNext').onclick  = () => { weekState.offset++; renderWeek(); };
+$('#weekToday').onclick = () => { weekState.offset = 0; renderWeek(); };
+
+// ============================================================
+//  Log time modal
+// ============================================================
+function openLogTimeModal(task) {
+  const host = $('#modalHost');
+  const proj = findProject(task.project_id);
+  const person = findPerson(task.author_id);
+  const todayIso = isoDate(new Date());
+  const existing = state.time_entries
+    .filter(e => e.task_id === task.id)
+    .sort((a, b) => a.work_date < b.work_date ? -1 : 1);
+  const totalH = existing.reduce((a, e) => a + (e.hours || 0), 0);
+
+  const entriesTableHtml = existing.length > 0 ? `
+    <div style="margin-top:16px;">
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--fg-muted);margin-bottom:6px;">Horas ya registradas</div>
+      <div style="border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;">
+        ${existing.map(e => `
+          <div style="display:flex;align-items:center;gap:10px;padding:7px 10px;border-bottom:1px solid var(--border);font-size:12px;">
+            <span style="font-weight:700;min-width:32px;">${e.hours}h</span>
+            <span style="color:var(--fg-muted);">${new Date(e.work_date+'T00:00').toLocaleDateString('es',{weekday:'short',day:'2-digit',month:'short'})}</span>
+            <span style="flex:1;color:var(--fg-subtle);font-style:italic;">${e.note ? escapeHtml(e.note) : ''}</span>
+          </div>`).join('')}
+        <div style="padding:7px 10px;font-size:12px;font-weight:600;background:var(--surface-2);display:flex;justify-content:space-between;">
+          <span>Total registrado</span>
+          <span class="mono" style="color:${task.estimated_hours && totalH > task.estimated_hours ? 'var(--danger)' : 'var(--fg)'};">
+            ${totalH.toFixed(1)}h${task.estimated_hours ? ` / ${task.estimated_hours}h est.` : ''}
+          </span>
+        </div>
+      </div>
+    </div>` : '';
+
+  host.innerHTML = `
+    <div class="modal-backdrop">
+      <div class="modal" role="dialog" style="max-width:460px;">
+        <h3>Registrar tiempo trabajado</h3>
+        <p style="font-size:13px;color:var(--fg-muted);margin:4px 0 14px;font-weight:500;">"${escapeHtml(task.text)}"
+          ${proj ? `<span style="opacity:.6;"> · ${escapeHtml(proj.name)}</span>` : ''}
+          ${person ? `<span style="opacity:.6;"> · ${escapeHtml(person.name)}</span>` : ''}
+        </p>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="field">
+            <label>Fecha de trabajo <span style="color:var(--danger)">*</span></label>
+            <input type="date" id="ltDate" value="${todayIso}"
+              style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);" />
+          </div>
+          <div class="field">
+            <label>Horas trabajadas <span style="color:var(--danger)">*</span></label>
+            <input type="number" id="ltHours" placeholder="ej. 2.5" min="0.25" max="16" step="0.25"
+              style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);" />
+          </div>
+        </div>
+        <div class="field" style="margin-top:12px;">
+          <label>Nota (opcional)</label>
+          <input type="text" id="ltNote" placeholder="¿Qué hiciste? ej: revisión de código, reunión cliente…"
+            style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);" />
+        </div>
+
+        ${entriesTableHtml}
+
+        <div class="modal-actions" style="margin-top:20px;">
+          <button class="btn btn-ghost" data-cancel>Cerrar</button>
+          <button class="btn btn-primary" data-save>Guardar entrada</button>
+        </div>
+      </div>
+    </div>`;
+
+  const close = () => host.innerHTML = '';
+  host.querySelector('[data-cancel]').onclick = close;
+  host.querySelector('.modal-backdrop').onclick = e => { if (e.target === e.currentTarget) close(); };
+
+  host.querySelector('[data-save]').onclick = async () => {
+    const workDate = host.querySelector('#ltDate').value;
+    const hours    = parseFloat(host.querySelector('#ltHours').value);
+    const note     = host.querySelector('#ltNote').value.trim();
+
+    if (!workDate) { toast('Selecciona una fecha', 'error'); return; }
+    if (!hours || hours <= 0) { toast('Ingresa las horas trabajadas', 'error'); return; }
+
+    const entry = {
+      id: uuid(),
+      task_id:   task.id,
+      person_id: task.author_id,
+      work_date: workDate,
+      hours:     hours,
+      note:      note || null,
+      created_at: new Date().toISOString()
+    };
+
+    state.time_entries.push(entry);
+    localStore.save();
+
+    if (sb) {
+      const { error } = await sb.from('time_entries').insert(entry);
+      if (error) { toast('Error guardando: ' + error.message, 'error'); return; }
+    }
+
+    toast(`${hours}h registradas`);
+    close();
+    renderAll();
+  };
+}
+
+// ============================================================
+//  Init
+// ============================================================
+loadAll();
+subscribeRealtime();
+</script>
+</body>
+</html>
