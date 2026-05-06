@@ -2767,7 +2767,6 @@ $('#reloadBtn').onclick = () => { loadAll(); toast('Datos recargados'); };
 //  Excel export
 // ============================================================
 $('#exportExcelBtn').onclick = () => {
-$('#exportExcelBtn2').onclick = () => $('#exportExcelBtn').click();
 
   if (!window.XLSX) { toast('SheetJS no cargó, intenta recargar', 'error'); return; }
   const fmtDt = iso => iso ? new Date(iso).toLocaleString('es', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
@@ -2811,6 +2810,8 @@ $('#exportExcelBtn2').onclick = () => $('#exportExcelBtn').click();
   ws['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:10} }];
   XLSX.utils.book_append_sheet(wb, ws, 'Tareas');
 
+  // ── Hoja Resumen equipo ──
+  const people = state.people;
   if (people.length) {
     const summary = people.map(p => {
       const mine = state.tasks.filter(t => t.author_id === p.id);
@@ -2861,6 +2862,7 @@ $('#exportExcelBtn2').onclick = () => $('#exportExcelBtn').click();
   XLSX.writeFile(wb, `SmartWork_${today}.xlsx`);
   toast('Excel descargado');
 };
+$('#exportExcelBtn2').onclick = () => $('#exportExcelBtn').click();
 
 // ============================================================
 //  Week view
