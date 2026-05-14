@@ -2669,39 +2669,52 @@ $('#taskListHost').addEventListener('click', async e => {
   } else if (act === 'edit-task') {
     if (task.done) return;
 
-    const fields = [{ key: 'text', label: 'Descripción', value: task.text }];
+   // Campos base que siempre estarán presentes
+    const fields = [
+      { key: 'text', label: 'Descripción', value: task.text },
+      { key: 'estimated_hours', label: 'Horas estimadas', type: 'number', value: task.estimated_hours || '' },
+      { key: 'due_date', label: 'Fecha de entrega', type: 'date', value: task.due_date || '' }
+    ];
 
+    // Solo permitir cambiar Proyecto, Autor y Prioridad si la tarea NO ha iniciado
+    // Esto es por seguridad de integridad de datos, pero mantenemos horas y fecha siempre editables
     if (st === 'idle') {
-      // Sin iniciar: todos los campos editables
-      fields.push({ key: 'project_id', label: 'Proyecto', type: 'select',
+      fields.push({ 
+        key: 'project_id', label: 'Proyecto', type: 'select',
         value: task.project_id || '',
         options: [{ value: '', label: 'Sin proyecto' }, ...state.projects.map(p => ({ value: p.id, label: p.name }))]
       });
-      fields.push({ key: 'author_id', label: 'Autor', type: 'select',
+      fields.push({ 
+        key: 'author_id', label: 'Autor', type: 'select',
         value: task.author_id || '',
         options: [{ value: '', label: 'Sin asignar' }, ...state.people.map(p => ({ value: p.id, label: p.name }))]
       });
-      fields.push({ key: 'priority', label: 'Prioridad', type: 'select',
+      fields.push({ 
+        key: 'priority', label: 'Prioridad', type: 'select',
         value: task.priority || 'media',
         options: [{ value: 'alta', label: 'Alta' }, { value: 'media', label: 'Media' }, { value: 'baja', label: 'Baja' }]
       });
-      fields.push({ key: 'estimated_hours', label: 'Horas estimadas', type: 'number', value: task.estimated_hours || '' });
-      fields.push({ key: 'due_date', label: 'Fecha de entrega', type: 'date', value: task.due_date || '' });
     }
     // En curso o pausada: solo descripción
 
-    openModal({
-      title: st === 'idle' ? 'Editar tarea' : 'Editar descripción',
+   openModal({
+      title: st === 'idle' ? 'Editar tarea' : 'Editar detalles (en curso)',
       fields,
       onSave: async (data) => {
-        const patch = { text: data.text.trim() || task.text };
+        // CAPTURA SIEMPRE ESTOS DATOS
+        const patch = { 
+          text: data.text.trim() || task.text,
+          estimated_hours: parseFloat(data.estimated_hours) || null,
+          due_date: data.due_date || null
+        };
+
+        // Captura adicional solo si estaba en modo idle
         if (st === 'idle') {
-          patch.project_id      = data.project_id || null;
-          patch.author_id       = data.author_id || null;
-          patch.priority        = data.priority || 'media';
-          patch.estimated_hours = parseFloat(data.estimated_hours) || null;
-          patch.due_date        = data.due_date || null;
+          patch.project_id = data.project_id || null;
+          patch.author_id = data.author_id || null;
+          patch.priority = data.priority || 'media';
         }
+
         Object.assign(task, patch);
         await dbUpdate('tasks', id, patch);
         renderAll();
