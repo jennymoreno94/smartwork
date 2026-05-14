@@ -1411,13 +1411,16 @@ function sessionsFor(taskId) {
 function activeSession(taskId) {
   return state.time_sessions.find(s => s.task_id === taskId && !s.ended_at) || null;
 }
+const MAX_SESSION_MS = 8 * 3600000; // 8h máximo por sesión — cap de jornada laboral
+
 function elapsedFor(task) {
   const sessions = sessionsFor(task.id);
   if (!sessions.length) return 0;
   return sessions.reduce((acc, s) => {
     const start = new Date(s.started_at).getTime();
     const end   = s.ended_at ? new Date(s.ended_at).getTime() : Date.now();
-    return acc + Math.max(0, end - start);
+    const raw   = Math.max(0, end - start);
+    return acc + Math.min(raw, MAX_SESSION_MS); // nunca más de 8h por sesión
   }, 0);
 }
 function realHoursFor(task) {
@@ -1517,6 +1520,22 @@ async function loadAll() {
     setConn(false);
   }
   renderAll();
+
+  // Cerrar sesiones abiertas que superen 8h (olvidaron pausar)
+  const staleSessions = state.time_sessions.filter(s => {
+    if (s.ended_at) return false;
+    return Date.now() - new Date(s.started_at).getTime() > MAX_SESSION_MS;
+  });
+  if (staleSessions.length > 0) {
+    for (const s of staleSessions) {
+      const cappedEnd = new Date(new Date(s.started_at).getTime() + MAX_SESSION_MS).toISOString();
+      s.ended_at = cappedEnd;
+      if (sb) { try { await sb.from('time_sessions').update({ ended_at: cappedEnd }).eq('id', s.id); } catch(e) {} }
+    }
+    localStore.save();
+    renderAll();
+    toast(`${staleSessions.length} sesión(es) cerradas automáticamente (límite 8h)`, 'error');
+  }
 }
 
 async function dbInsert(table, row) {
@@ -1602,8 +1621,28 @@ function subscribeRealtime() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'time_entries' },  payload => onRT('time_entries', payload))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'time_sessions' }, payload => onRT('time_sessions', payload))
     .subscribe(status => {
-      if (status === 'SUBSCRIBED') setConn(true);
+      if (status === 'SUBSCRIBED') {
+        setConn(true);
+        console.log('[SmartWork] Realtime conectado');
+      } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+        console.warn('[SmartWork] Realtime desconectado, reintentando...');
+        setTimeout(subscribeRealtime, 5000);
+      }
     });
+
+  // Polling fallback cada 15s por si Realtime falla
+  setInterval(async () => {
+    if (!sb) return;
+    try {
+      const [t, ts] = await Promise.all([
+        sb.from('tasks').select('*').order('created_at', { ascending: false }),
+        sb.from('time_sessions').select('*').order('started_at', { ascending: false }),
+      ]);
+      if (!t.error) state.tasks = t.data || [];
+      if (!ts.error) state.time_sessions = ts.data || [];
+      renderAll();
+    } catch(e) { /* silencioso */ }
+  }, 15000);
 }
 function onRT(table, { eventType, new: nu, old }) {
   const key = table;
@@ -1941,8 +1980,9 @@ function taskHTML(t) {
       <button class="check idle" data-act="resume" title="Reanudar" aria-label="Reanudar" style="border-color:var(--warn);color:var(--warn);">
         <svg viewBox="0 0 12 12" fill="currentColor"><path d="M4 3L9 6L4 9Z"/></svg>
       </button>`;
+    // done — solo muestra checkmark, sin acción
     return `
-      <button class="check checked" data-act="toggle" aria-label="Reabrir" title="Reabrir">
+      <button class="check checked" style="cursor:default;" aria-label="Completada" title="Tarea completada">
         <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5 5 9l4.5-5"/></svg>
       </button>`;
   })();
@@ -2033,14 +2073,22 @@ function taskHTML(t) {
         </div>
       </div>
       ${timeBlock}
-      <div class="task-actions">
-        <button class="icon-btn" data-act="edit-task" aria-label="Editar tarea" title="Editar tarea">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2.5l2.5 2.5L5 13.5 2 14l.5-3z"/></svg>
-        </button>
-        <button class="icon-btn danger" data-act="delete" aria-label="Eliminar">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h10M6 5V3.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V5M5 5l.7 8.1a1 1 0 0 0 1 .9h2.6a1 1 0 0 0 1-.9L11 5"/></svg>
-        </button>
-      </div>
+        <div class="task-actions">
+        ${st === 'idle' ? `
+          <button class="icon-btn" data-act="edit-task" aria-label="Editar tarea" title="Editar tarea">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2.5l2.5 2.5L5 13.5 2 14l.5-3z"/></svg>
+          </button>
+          <button class="icon-btn danger" data-act="delete" aria-label="Eliminar">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h10M6 5V3.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V5M5 5l.7 8.1a1 1 0 0 0 1 .9h2.6a1 1 0 0 0 1-.9L11 5"/></svg>
+          </button>
+        ` : st === 'paused' ? `
+          <button class="icon-btn" data-act="edit-task" aria-label="Editar tarea" title="Solo descripción y horas">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2.5l2.5 2.5L5 13.5 2 14l.5-3z"/></svg>
+          </button>
+        ` : `
+          <span style="font-size:10px;color:var(--fg-subtle);padding:0 4px;">${st === 'running' ? '▶ en curso' : '✓ completada'}</span>
+        `}
+        </div>
     </div>
   `;
 }
@@ -2260,6 +2308,13 @@ function openModal({ title, fields, onSave }) {
               <label>${escapeHtml(f.label)}</label>
               <input type="number" name="${f.key}" value="${escapeHtml(String(f.value ?? ''))}" min="0.5" max="999" step="0.5" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);" />
             </div>
+          ` : f.type === 'select' ? `
+            <div class="field">
+              <label>${escapeHtml(f.label)}</label>
+              <select name="${f.key}" style="width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);appearance:none;">
+                ${(f.options||[]).map(o => `<option value="${escapeHtml(o.value)}" ${o.value===f.value?'selected':''}>${escapeHtml(o.label)}</option>`).join('')}
+              </select>
+            </div>
           ` : `
             <div class="field">
               <label>${escapeHtml(f.label)}</label>
@@ -2476,16 +2531,11 @@ $('#taskListHost').addEventListener('click', async e => {
   const actEl = e.target.closest('[data-act]');
   if (!actEl) return;
   const act = actEl.dataset.act;
+  const st = taskState(task); // estado actual en el momento del click
 
   if (act === 'toggle') {
-    if (task.done) {
-      // Reabrir — no borra sesiones, conserva tiempo acumulado
-      const patch = { done: false, completed_at: null };
-      Object.assign(task, patch);
-      await dbUpdate('tasks', id, patch);
-      renderAll();
-    }
-    // toggle desde done → handled above; from running/paused → use complete-confirm
+    // toggle solo se usa desde done para reabrir — deshabilitado
+    return;
   } else if (act === 'complete-confirm') {
     // Modal de confirmación antes de completar
     const totalH = realHoursFor(task);
@@ -2617,24 +2667,40 @@ $('#taskListHost').addEventListener('click', async e => {
     localStore.save();
     renderAll();
   } else if (act === 'edit-task') {
-    const fields = [
-      { key: 'text', label: 'Descripción', value: task.text },
-    ];
-    // Si no está completada, permitir editar horas estimadas y fecha
-    if (!task.done) {
+    if (task.done) return;
+
+    const fields = [{ key: 'text', label: 'Descripción', value: task.text }];
+
+    if (st === 'idle') {
+      // Sin iniciar: todos los campos editables
+      fields.push({ key: 'project_id', label: 'Proyecto', type: 'select',
+        value: task.project_id || '',
+        options: [{ value: '', label: 'Sin proyecto' }, ...state.projects.map(p => ({ value: p.id, label: p.name }))]
+      });
+      fields.push({ key: 'author_id', label: 'Autor', type: 'select',
+        value: task.author_id || '',
+        options: [{ value: '', label: 'Sin asignar' }, ...state.people.map(p => ({ value: p.id, label: p.name }))]
+      });
+      fields.push({ key: 'priority', label: 'Prioridad', type: 'select',
+        value: task.priority || 'media',
+        options: [{ value: 'alta', label: 'Alta' }, { value: 'media', label: 'Media' }, { value: 'baja', label: 'Baja' }]
+      });
       fields.push({ key: 'estimated_hours', label: 'Horas estimadas', type: 'number', value: task.estimated_hours || '' });
-      if (!task.started_at) {
-        fields.push({ key: 'due_date', label: 'Fecha de entrega', type: 'date', value: task.due_date || '' });
-      }
+      fields.push({ key: 'due_date', label: 'Fecha de entrega', type: 'date', value: task.due_date || '' });
     }
+    // En curso o pausada: solo descripción
+
     openModal({
-      title: 'Editar tarea',
+      title: st === 'idle' ? 'Editar tarea' : 'Editar descripción',
       fields,
       onSave: async (data) => {
         const patch = { text: data.text.trim() || task.text };
-        if (!task.done) {
+        if (st === 'idle') {
+          patch.project_id      = data.project_id || null;
+          patch.author_id       = data.author_id || null;
+          patch.priority        = data.priority || 'media';
           patch.estimated_hours = parseFloat(data.estimated_hours) || null;
-          if (!task.started_at) patch.due_date = data.due_date || null;
+          patch.due_date        = data.due_date || null;
         }
         Object.assign(task, patch);
         await dbUpdate('tasks', id, patch);
@@ -2651,15 +2717,35 @@ $('#taskListHost').addEventListener('click', async e => {
 });
 
 // Live ticker — actualiza cronómetros cada segundo sin re-renderizar todo
-setInterval(() => {
+setInterval(async () => {
   const running = state.tasks.filter(t => activeSession(t.id));
   if (!running.length) return;
 
-  running.forEach(t => {
+  let needsRender = false;
+
+  for (const t of running) {
+    const active = activeSession(t.id);
+    if (!active) continue;
+
+    const sessionMs = Date.now() - new Date(active.started_at).getTime();
+
+    // Auto-pausar si la sesión supera 8h (olvidaron pausar)
+    if (sessionMs > MAX_SESSION_MS) {
+      const now = new Date().toISOString();
+      active.ended_at = now;
+      if (sb) { try { await sb.from('time_sessions').update({ ended_at: now }).eq('id', active.id); } catch(e) {} }
+      localStore.save();
+      toast(`⚠ Sesión de "${t.text}" pausada automáticamente (8h máx.)`, 'error');
+      needsRender = true;
+      continue;
+    }
+
     // Actualizar el reloj en vivo en la card
     const el = document.getElementById(`live-${t.id}`);
     if (el) el.textContent = fmtTime(elapsedFor(t));
-  });
+  }
+
+  if (needsRender) renderAll();
 
   // Actualizar stat de tiempo total
   const all = filteredTasks();
